@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice")
     # プリセット話者: Vivian, Serena, Uncle_Fu, Dylan, Eric, Ryan, Aiden, Ono_Anna, Sohee
     # 男性話者: Uncle_Fu, Dylan, Eric, Ryan, Aiden。日本語ネイティブは Ono_Anna (女性) のみ。
-    parser.add_argument("--speaker", default="Ryan", help="Qwen3-TTS プリセット話者名")
+    parser.add_argument("--speaker", default="Ono_Anna", help="Qwen3-TTS プリセット話者名")
     parser.add_argument("--language", default="Japanese")
     parser.add_argument("--instruct", default=None, help="話し方のスタイル指示 (省略可)")
     parser.add_argument("--device", default="cuda:0")

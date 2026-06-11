@@ -6,7 +6,9 @@
 ## パイプライン
 
 ```
-terms.txt (1 行 1 用語)
+PDF 文書群 (任意)
+   ↓ scripts/extract_terms.py        (pypdf + Gemma 4)
+terms.txt (1 行 1 用語) ← 手書きのリストでも OK
    ↓ scripts/generate_sentences.py   (Gemma 4)
 sentences.jsonl  {"id", "term", "sentence"}
    ↓ scripts/synthesize_speech.py    (Qwen3-TTS)
@@ -27,6 +29,11 @@ uv sync --project gemma_runtime   # Gemma 4 用 (transformers 5.x)
 ## 使い方
 
 ```bash
+# 0. (任意) PDF → 専門用語リスト (pypdf + Gemma 4)
+uv run --project gemma_runtime python scripts/extract_terms.py \
+    --pdfs docs/ \
+    --out out/terms.txt
+
 # 1. 用語 → 発話例文 (Gemma 4)
 uv run --project gemma_runtime python scripts/generate_sentences.py \
     --terms terms_example.txt \
@@ -37,7 +44,7 @@ uv run --project gemma_runtime python scripts/generate_sentences.py \
 uv run python scripts/synthesize_speech.py \
     --sentences out/sentences.jsonl \
     --out-dir out/audio \
-    --speaker Ryan
+    --speaker Ono_Anna
 ```
 
 プリセット話者: Vivian, Serena, Uncle_Fu, Dylan, Eric, Ryan, Aiden, Ono_Anna, Sohee
@@ -47,10 +54,13 @@ uv run python scripts/synthesize_speech.py \
 
 | スクリプト | オプション | 既定値 | 説明 |
 |---|---|---|---|
+| extract_terms.py | `--chunk-chars` | 3000 | Gemma に渡すチャンクの文字数 |
+| | `--min-count` | 1 | この回数以上のチャンクに出た用語のみ採用 |
+| | `--max-terms` | 0 (無制限) | 出力する用語数の上限 |
 | generate_sentences.py | `--sentences-per-term` | 3 | 用語あたりの例文数 |
 | | `--model` | google/gemma-4-E2B-it | Gemma モデル ID |
 | | `--temperature` | 0.8 | 生成の多様性 |
-| synthesize_speech.py | `--speaker` | Ryan | Qwen3-TTS プリセット話者 |
+| synthesize_speech.py | `--speaker` | Ono_Anna | Qwen3-TTS プリセット話者 |
 | | `--instruct` | (なし) | 話し方のスタイル指示 |
 | | `--model` | Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice | TTS モデル ID |
 
