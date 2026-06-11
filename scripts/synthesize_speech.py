@@ -31,7 +31,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sentences", type=Path, required=True, help="例文 JSONL")
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--model", default="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice")
-    parser.add_argument("--speaker", default="Vivian", help="Qwen3-TTS プリセット話者名")
+    # プリセット話者: Vivian, Serena, Uncle_Fu, Dylan, Eric, Ryan, Aiden, Ono_Anna, Sohee
+    # 日本語は Ono_Anna が自然 (Vivian 等は中国語系でアクセントが不自然になりがち)
+    parser.add_argument("--speaker", default="Ono_Anna", help="Qwen3-TTS プリセット話者名")
     parser.add_argument("--language", default="Japanese")
     parser.add_argument("--instruct", default=None, help="話し方のスタイル指示 (省略可)")
     parser.add_argument("--device", default="cuda:0")

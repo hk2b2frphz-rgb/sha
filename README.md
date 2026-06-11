@@ -37,8 +37,11 @@ uv run --project gemma_runtime python scripts/generate_sentences.py \
 uv run python scripts/synthesize_speech.py \
     --sentences out/sentences.jsonl \
     --out-dir out/audio \
-    --speaker Vivian
+    --speaker Ono_Anna
 ```
+
+プリセット話者: Vivian, Serena, Uncle_Fu, Dylan, Eric, Ryan, Aiden, Ono_Anna, Sohee
+(日本語は Ono_Anna が自然)
 
 ## 主なオプション
 
@@ -47,7 +50,7 @@ uv run python scripts/synthesize_speech.py \
 | generate_sentences.py | `--sentences-per-term` | 3 | 用語あたりの例文数 |
 | | `--model` | google/gemma-4-E2B-it | Gemma モデル ID |
 | | `--temperature` | 0.8 | 生成の多様性 |
-| synthesize_speech.py | `--speaker` | Vivian | Qwen3-TTS プリセット話者 |
+| synthesize_speech.py | `--speaker` | Ono_Anna | Qwen3-TTS プリセット話者 |
 | | `--instruct` | (なし) | 話し方のスタイル指示 |
 | | `--model` | Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice | TTS モデル ID |
 
