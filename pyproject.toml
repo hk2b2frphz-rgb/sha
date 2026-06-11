@@ -9,6 +9,7 @@ dependencies = [
     "qwen-tts",
     "soundfile",
     "torch>=2.1.0",
+    "torchaudio>=2.1.0",
     "transformers>=4.51.0",
 ]
 
@@ -17,6 +18,7 @@ package = false
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
 
 [[tool.uv.index]]
 name = "pytorch-cu121"
