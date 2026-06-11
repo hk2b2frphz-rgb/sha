@@ -6,7 +6,9 @@
 ## パイプライン
 
 ```
-PDF 文書群 (任意)
+PDF / PPTX / DOCX / 画像 (スキャン文書 OK)
+   ↓ scripts/ocr_documents.py        (Qwen3-VL で OCR)  ※テキスト PDF だけなら省略可
+テキストファイル群
    ↓ scripts/extract_terms.py        (pypdf + Gemma 4)
 terms.txt (1 行 1 用語) ← 手書きのリストでも OK
    ↓ scripts/generate_sentences.py   (Gemma 4)
@@ -29,9 +31,16 @@ uv sync --project gemma_runtime   # Gemma 4 用 (transformers 5.x)
 ## 使い方
 
 ```bash
-# 0. (任意) PDF → 専門用語リスト (pypdf + Gemma 4)
+# 0a. (任意) PDF/PPTX/DOCX/画像 → テキスト (Qwen3-VL で OCR)
+#     スキャン PDF やパワポを使う場合のみ。PPTX/DOCX には LibreOffice が必要。
+uv run --project gemma_runtime python scripts/ocr_documents.py \
+    --docs docs/ \
+    --out-dir out/text
+
+# 0b. (任意) 文書 → 専門用語リスト (Gemma 4)
+#     テキスト PDF なら docs/ を直接渡してよい (OCR 不要)
 uv run --project gemma_runtime python scripts/extract_terms.py \
-    --pdfs docs/ \
+    --inputs out/text \
     --out out/terms.txt
 
 # 1. 用語 → 発話例文 (Gemma 4)
@@ -54,6 +63,8 @@ uv run python scripts/synthesize_speech.py \
 
 | スクリプト | オプション | 既定値 | 説明 |
 |---|---|---|---|
+| ocr_documents.py | `--model` | Qwen/Qwen3-VL-8B-Instruct | OCR 用 VLM の モデル ID |
+| | `--scale` | 2.0 | PDF レンダリング倍率 (文字が潰れるなら上げる) |
 | extract_terms.py | `--chunk-chars` | 3000 | Gemma に渡すチャンクの文字数 |
 | | `--min-count` | 1 | この回数以上のチャンクに出た用語のみ採用 |
 | | `--max-terms` | 0 (無制限) | 出力する用語数の上限 |

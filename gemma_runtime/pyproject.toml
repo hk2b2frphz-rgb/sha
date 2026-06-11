@@ -4,7 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "accelerate",
+    "pillow",
     "pypdf",
+    "pypdfium2",
     "sentencepiece",
     "torch>=2.1.0",
     "transformers>=5.5.0",

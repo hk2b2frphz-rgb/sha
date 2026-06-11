@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-PDF 文書群から専門用語を抽出する。
+文書群 (PDF / テキスト) から専門用語を抽出する。
 
-入力:  PDF ファイルまたは PDF を含むディレクトリ (--pdfs, 複数指定可)
+入力:  PDF・テキストファイル、またはそれらを含むディレクトリ (--inputs, 複数指定可)。
+       スキャン PDF やパワポは先に ocr_documents.py でテキスト化してから渡す。
 出力:  1 行 1 用語のテキストファイル (--out)。generate_sentences.py にそのまま渡せる。
 
 処理:
-  1. pypdf で各 PDF をテキスト化
+  1. PDF は pypdf でテキスト化 (.txt はそのまま読む)
   2. テキストをチャンクに分割し、Gemma 4 に専門用語を JSON 配列で抽出させる
   3. 全チャンクの結果をマージして重複排除し、出現回数の多い順に出力
 
 使い方:
   uv run --project gemma_runtime python scripts/extract_terms.py \
-      --pdfs docs/ --out out/terms.txt
+      --inputs docs/ --out out/terms.txt
 """
 from __future__ import annotations
 
@@ -49,10 +50,10 @@ PROMPT_TEMPLATE = """\
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="PDF から専門用語を抽出する")
+    parser = argparse.ArgumentParser(description="文書 (PDF/テキスト) から専門用語を抽出する")
     parser.add_argument(
-        "--pdfs", type=Path, nargs="+", required=True,
-        help="PDF ファイルまたは PDF を含むディレクトリ (複数指定可)",
+        "--inputs", "--pdfs", type=Path, nargs="+", required=True,
+        help="PDF/テキストファイル、またはそれらを含むディレクトリ (複数指定可)",
     )
     parser.add_argument("--out", type=Path, required=True, help="出力テキストパス (1 行 1 用語)")
     parser.add_argument("--chunk-chars", type=int, default=3000, help="Gemma に渡すチャンクの文字数")
@@ -74,18 +75,34 @@ def parse_args() -> argparse.Namespace:
 # PDF → テキスト
 # ---------------------------------------------------------------------------
 
-def collect_pdf_paths(inputs: list[Path]) -> list[Path]:
+SUPPORTED_SUFFIXES = {".pdf", ".txt"}
+
+
+def collect_doc_paths(inputs: list[Path]) -> list[Path]:
     paths: list[Path] = []
     for p in inputs:
         if p.is_dir():
-            paths.extend(sorted(p.rglob("*.pdf")))
-        elif p.suffix.lower() == ".pdf":
+            paths.extend(
+                f for f in sorted(p.rglob("*")) if f.suffix.lower() in SUPPORTED_SUFFIXES
+            )
+        elif p.suffix.lower() in SUPPORTED_SUFFIXES:
             paths.append(p)
         else:
-            logger.warning("PDF ではないためスキップ: %s", p)
+            logger.warning(
+                "非対応形式のためスキップ: %s (pptx/スキャンPDF は先に ocr_documents.py でテキスト化)", p
+            )
     if not paths:
-        raise SystemExit("PDF が見つかりません")
+        raise SystemExit("PDF/テキストが見つかりません")
     return paths
+
+
+def doc_to_text(path: Path) -> str:
+    if path.suffix.lower() == ".txt":
+        text = path.read_text(encoding="utf-8")
+        text = re.sub(r"[ \t　]+", " ", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+    return pdf_to_text(path)
 
 
 def pdf_to_text(path: Path) -> str:
@@ -194,19 +211,22 @@ def extract_from_chunk(pipe: Any, args: argparse.Namespace, chunk: str) -> list[
 
 def main() -> None:
     args = parse_args()
-    pdf_paths = collect_pdf_paths(args.pdfs)
-    logger.info("%d 個の PDF を処理します", len(pdf_paths))
+    doc_paths = collect_doc_paths(args.inputs)
+    logger.info("%d 個の文書を処理します", len(doc_paths))
 
     # 1. テキスト化
-    all_chunks: list[tuple[str, str]] = []  # (pdf名, チャンク)
-    for path in pdf_paths:
-        text = pdf_to_text(path)
+    all_chunks: list[tuple[str, str]] = []  # (文書名, チャンク)
+    for path in doc_paths:
+        text = doc_to_text(path)
         chunks = split_chunks(text, args.chunk_chars)
         logger.info("%s: %d 文字 -> %d チャンク", path.name, len(text), len(chunks))
         all_chunks.extend((path.name, c) for c in chunks)
 
     if not all_chunks:
-        raise SystemExit("テキストを抽出できませんでした (スキャン PDF の場合は OCR が必要です)")
+        raise SystemExit(
+            "テキストを抽出できませんでした "
+            "(スキャン PDF は先に ocr_documents.py でテキスト化してください)"
+        )
 
     # 2. Gemma で抽出
     start = time.monotonic()
@@ -235,7 +255,7 @@ def main() -> None:
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as fh:
-        fh.write(f"# {len(pdf_paths)} PDF / {total} チャンクから抽出 (出現チャンク数順)\n")
+        fh.write(f"# {len(doc_paths)} 文書 / {total} チャンクから抽出 (出現チャンク数順)\n")
         for term, count in selected:
             fh.write(f"{term}\n")
 
