@@ -32,6 +32,11 @@ uv sync --project gemma_runtime   # Gemma 4 用 (transformers 5.x)
 
 ```bash
 # 0. (推奨) 文書 → OCR → 専門用語リストまで一括実行
+#    PBS クラスタの場合:
+mkdir -p logs
+qsub scripts/run_extract.pbs                              # docs/ -> out/terms.txt
+qsub -v DOCS_DIR=mydocs,MIN_COUNT=2 scripts/run_extract.pbs   # 入力やオプション変更
+#    直接実行の場合:
 bash scripts/run_extract.sh docs/          # -> out/terms.txt
 # テキスト PDF のみなら: SKIP_OCR=1 bash scripts/run_extract.sh docs/
 # ノイズ削減: MIN_COUNT=2 MAX_TERMS=100 bash scripts/run_extract.sh docs/
