@@ -51,43 +51,18 @@ uv run python scripts/synthesize_speech.py \
 | | `--instruct` | (なし) | 話し方のスタイル指示 |
 | | `--model` | Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice | TTS モデル ID |
 
-## トラブルシューティング: libcudart.so.13 が開けない (V100)
+## 環境診断 (トラブルシューティング)
 
-原因の見立て: CUDA 13 ビルドのパッケージが環境に混入している。
-プロジェクトは CUDA 12.1 (cu121) の PyTorch を指定しており、
-CUDA 13 は V100 (Volta) をサポートしないため、全パッケージを CUDA 12 系に揃える必要がある。
-
-以下を GPU マシンで実行して、出力を確認する:
+CUDA / torch / qwen-tts まわりのエラー (libcudart が開けない等) が出たら、
+診断スクリプトを実行する。ステップごとに OK/NG と診断まとめが表示される。
 
 ```bash
-cd term2speech
-
-# 1. torch 自体は生きているか
-uv run python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
-
-# 2. どのパッケージが libcudart.so.13 を要求しているか特定
-uv run python -X importtime -c "from qwen_tts import Qwen3TTSModel" 2>&1 | grep -i -B2 cudart
-
-# 3. CUDA 13 系の nvidia パッケージが混入していないか
-uv pip list | grep -i -E "nvidia|cu13|torch"
-
-# (gemma_runtime 側で同じ症状が出る場合)
-uv run --project gemma_runtime python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
-uv pip list --project gemma_runtime | grep -i -E "nvidia|cu13|torch"
+python3 scripts/check_env.py
 ```
 
-出力結果をもとに pyproject.toml を修正する
-(例: `torch>=2.1.0,<2.6` で上限固定、cu13 系パッケージを cu12 系へ差し替え)。
+NG がある場合は全出力をコピーして共有する。
 
-### V100 での注意
-
-V100 は bfloat16 をハードウェアサポートしないため、音声合成では `--dtype float16` を明示する:
-
-```bash
-uv run python scripts/synthesize_speech.py \
-    --sentences out/sentences.jsonl --out-dir out/audio \
-    --dtype float16
-```
+注意: V100 は bfloat16 非対応のため、synthesize_speech.py には `--dtype float16` を付けること。
 
 ## 出力フォーマット
 
