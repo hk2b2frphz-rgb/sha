@@ -95,14 +95,21 @@ def office_to_pdf(path: Path, work_dir: Path) -> Path:
     return pdf
 
 
-def pdf_to_images(path: Path, scale: float) -> list[Any]:
+def iter_pdf_images(path: Path, scale: float):
+    """1 ページずつレンダリングして返すジェネレータ。
+    長い PDF でも全ページをメモリに展開しない。"""
     import pypdfium2 as pdfium
 
     pdf = pdfium.PdfDocument(path)
-    images = []
-    for page in pdf:
-        images.append(page.render(scale=scale).to_pil())
-    return images
+    try:
+        n_pages = len(pdf)
+        for i in range(n_pages):
+            page = pdf[i]
+            image = page.render(scale=scale).to_pil()
+            page.close()
+            yield i + 1, n_pages, image
+    finally:
+        pdf.close()
 
 
 # ---------------------------------------------------------------------------
@@ -183,29 +190,35 @@ def main() -> None:
                 suffix = doc.suffix.lower()
                 if suffix in {".png", ".jpg", ".jpeg"}:
                     from PIL import Image
-                    images = [Image.open(doc)]
+                    image_iter = iter([(1, 1, Image.open(doc))])
                 else:
                     pdf_path = doc if suffix == ".pdf" else office_to_pdf(doc, work_dir)
-                    images = pdf_to_images(pdf_path, args.scale)
+                    image_iter = iter_pdf_images(pdf_path, args.scale)
             except Exception as exc:
                 logger.error("%s: 読み込み失敗 (%s)", doc.name, exc)
                 failed.append(doc.name)
                 continue
 
             out_path = args.out_dir / (doc.stem + ".txt")
-            pages: list[str] = []
-            with out_path.open("w", encoding="utf-8") as fh:
-                for pi, image in enumerate(images, 1):
-                    text = ocr.ocr_image(image)
-                    pages.append(text)
-                    fh.write(text + "\n\n")
-                    fh.flush()  # 中断してもページ単位で残る
-                    logger.info(
-                        "  ページ %d/%d: %d 文字 | %s",
-                        pi, len(images), len(text),
-                        (text[:40].replace("\n", " ") + "...") if text else "(テキストなし)",
-                    )
-            total_chars = sum(len(p) for p in pages)
+            total_chars = 0
+            try:
+                with out_path.open("w", encoding="utf-8") as fh:
+                    for pi, n_pages, image in image_iter:
+                        text = ocr.ocr_image(image)
+                        image.close()
+                        total_chars += len(text)
+                        fh.write(text + "\n\n")
+                        fh.flush()  # 中断してもページ単位で残る
+                        logger.info(
+                            "  ページ %d/%d: %d 文字 | %s",
+                            pi, n_pages, len(text),
+                            (text[:40].replace("\n", " ") + "...") if text else "(テキストなし)",
+                        )
+            except Exception as exc:
+                logger.error("%s: ページ処理失敗 (%s)。ここまでの結果は %s に保存済み",
+                             doc.name, exc, out_path.name)
+                failed.append(doc.name)
+                continue
             elapsed = time.monotonic() - start
             eta = elapsed / di * (len(docs) - di)
             logger.info(
