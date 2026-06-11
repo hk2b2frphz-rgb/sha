@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -142,22 +143,34 @@ def main() -> None:
     terms = load_terms(args.terms)
     logger.info("%d 用語 x %d 文を生成します", len(terms), args.sentences_per_term)
 
+    start = time.monotonic()
     pipe = build_pipeline(args)
+    logger.info("モデルロード完了 (%.1f 秒)", time.monotonic() - start)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     failed: list[str] = []
+    gen_start = time.monotonic()
     with args.out.open("w", encoding="utf-8") as fh:
-        for term in terms:
+        for ti, term in enumerate(terms, 1):
+            logger.info("--- (%d/%d) 用語「%s」を生成中 ---", ti, len(terms), term)
             sentences = generate_for_term(pipe, args, term)
             if not sentences:
                 failed.append(term)
+                logger.error("(%d/%d) 「%s」: 生成失敗", ti, len(terms), term)
                 continue
             for sentence in sentences:
                 count += 1
                 record = {"id": f"{count:04d}", "term": term, "sentence": sentence}
                 fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-            logger.info("「%s」: %d 文生成", term, len(sentences))
+                logger.info("  [%04d] %s", count, sentence)
+            fh.flush()  # 中断してもここまでの結果は out に残る
+            elapsed = time.monotonic() - gen_start
+            eta = elapsed / ti * (len(terms) - ti)
+            logger.info(
+                "(%d/%d) 完了: 累計 %d 文 / 経過 %.0f 秒 / 残り目安 %.0f 秒",
+                ti, len(terms), count, elapsed, eta,
+            )
 
     logger.info("完了: %d 文を %s に保存", count, args.out)
     if failed:

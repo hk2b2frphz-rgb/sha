@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,7 @@ def main() -> None:
 
     import soundfile as sf
 
+    start = time.monotonic()
     with manifest_path.open("w", encoding="utf-8") as fh:
         for i, rec in enumerate(records, 1):
             text = rec["sentence"]
@@ -110,8 +112,12 @@ def main() -> None:
                 "speaker": args.speaker,
             }
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-            logger.info("(%d/%d) %s [%.1fs] %s", i, len(records), wav_path.name,
-                        entry["duration_sec"], text[:30])
+            fh.flush()  # 中断してもここまでの manifest は残る
+            elapsed = time.monotonic() - start
+            eta = elapsed / i * (len(records) - i)
+            logger.info("(%d/%d) %s [%.1fs] %s | 経過 %.0f 秒 / 残り目安 %.0f 秒",
+                        i, len(records), wav_path.name,
+                        entry["duration_sec"], text[:30], elapsed, eta)
 
     logger.info("完了: %s", manifest_path)
 
