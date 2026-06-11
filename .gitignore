@@ -1,0 +1,6 @@
+.venv/
+gemma_runtime/.venv/
+__pycache__/
+out/
+*.wav
+uv.lock

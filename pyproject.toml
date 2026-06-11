@@ -1,0 +1,24 @@
+[project]
+name = "term2speech"
+version = "0.1.0"
+description = "専門用語から発話例文を生成し音声合成する (ASR テスト用)"
+requires-python = ">=3.11"
+dependencies = [
+    "accelerate",
+    "numpy",
+    "qwen-tts",
+    "soundfile",
+    "torch>=2.1.0",
+    "transformers>=4.51.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
