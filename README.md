@@ -31,6 +31,13 @@ uv sync --project gemma_runtime   # Gemma 4 用 (transformers 5.x)
 ## 使い方
 
 ```bash
+# 0. (推奨) 文書 → OCR → 専門用語リストまで一括実行
+bash scripts/run_extract.sh docs/          # -> out/terms.txt
+# テキスト PDF のみなら: SKIP_OCR=1 bash scripts/run_extract.sh docs/
+# ノイズ削減: MIN_COUNT=2 MAX_TERMS=100 bash scripts/run_extract.sh docs/
+
+# --- 以下は個別実行する場合 ---
+
 # 0a. (任意) PDF/PPTX/DOCX/画像 → テキスト (Qwen3-VL で OCR)
 #     スキャン PDF やパワポを使う場合のみ。PPTX/DOCX には LibreOffice が必要。
 uv run --project gemma_runtime python scripts/ocr_documents.py \
