@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# 文書 (PDF/PPTX/DOCX/画像) → OCR → 専門用語リストまでを一気に実行する。
+# Run documents (PDF/PPTX/DOCX/images) -> OCR -> technical term list in one go.
 #
-# 使い方:
-#   bash scripts/run_extract.sh <文書ディレクトリ> [出力ディレクトリ]
+# Usage:
+#   bash scripts/run_extract.sh <docs-dir> [out-dir]
 #
-# 例:
-#   bash scripts/run_extract.sh docs/            # -> out/ 配下に出力
-#   bash scripts/run_extract.sh docs/ out_run2/  # 出力先を変える
+# Examples:
+#   bash scripts/run_extract.sh docs/            # -> outputs under out/
+#   bash scripts/run_extract.sh docs/ out_run2/  # custom output dir
 #
-# 環境変数で調整:
-#   SKIP_OCR=1     テキスト PDF のみで OCR が不要な場合 (extract_terms に直接渡す)
-#   MIN_COUNT=2    2 チャンク以上に出現した用語のみ採用 (ノイズ削減)
-#   MAX_TERMS=100  頻出順に上位 100 語へ絞る
+# Environment variables:
+#   SKIP_OCR=1     skip OCR for text-based PDFs (pass them directly to extract_terms)
+#   MIN_COUNT=2    keep only terms appearing in 2+ chunks (noise reduction)
+#   MAX_TERMS=100  cap the list at the top 100 most frequent terms
 set -euo pipefail
 
 DOCS_DIR="${1:?usage: bash scripts/run_extract.sh <docs-dir> [out-dir]}"
@@ -22,10 +22,10 @@ MAX_TERMS="${MAX_TERMS:-0}"
 
 cd "$(dirname "$0")/.."
 
-echo "=== 入力: $DOCS_DIR / 出力: $OUT_DIR ==="
+echo "=== input: $DOCS_DIR / output: $OUT_DIR ==="
 
 if [ "$SKIP_OCR" = "1" ]; then
-    echo "=== STEP 1/2: OCR をスキップ (SKIP_OCR=1) ==="
+    echo "=== STEP 1/2: skipping OCR (SKIP_OCR=1) ==="
     EXTRACT_INPUT="$DOCS_DIR"
 else
     echo "=== STEP 1/2: OCR (Qwen3-VL) ==="
@@ -35,7 +35,7 @@ else
     EXTRACT_INPUT="$OUT_DIR/text"
 fi
 
-echo "=== STEP 2/2: 専門用語抽出 (Gemma 4) ==="
+echo "=== STEP 2/2: term extraction (Gemma 4) ==="
 uv run --project gemma_runtime python scripts/extract_terms.py \
     --inputs "$EXTRACT_INPUT" \
     --out "$OUT_DIR/terms.txt" \
@@ -43,11 +43,11 @@ uv run --project gemma_runtime python scripts/extract_terms.py \
     --max-terms "$MAX_TERMS"
 
 echo ""
-echo "=== 完了 ==="
-echo "用語リスト: $OUT_DIR/terms.txt"
-echo "先頭 20 行:"
+echo "=== done ==="
+echo "term list: $OUT_DIR/terms.txt"
+echo "first 20 lines:"
 head -n 20 "$OUT_DIR/terms.txt"
 echo ""
-echo "次のステップ (例文生成):"
+echo "next step (sentence generation):"
 echo "  uv run --project gemma_runtime python scripts/generate_sentences.py \\"
 echo "      --terms $OUT_DIR/terms.txt --out $OUT_DIR/sentences.jsonl"
