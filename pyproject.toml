@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "accelerate",
     "numpy",
+    "openai>=1.0.0",
     "qwen-tts",
     "soundfile",
     "torch>=2.1.0",

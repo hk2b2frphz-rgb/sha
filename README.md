@@ -13,6 +13,8 @@ PDF / PPTX / DOCX / 画像 (スキャン文書 OK)
 terms.txt (1 行 1 用語) ← 手書きのリストでも OK
    ↓ scripts/generate_sentences.py   (Gemma 4)
 sentences.jsonl  {"id", "term", "sentence"}
+   ↓ scripts/annotate_readings.py    (GPT-4o)  ← 専門用語の読みを確認し tts_text を付与
+sentences_annotated.jsonl  {"id", "term", "sentence", "reading", "tts_text"}
    ↓ scripts/synthesize_speech.py    (Qwen3-TTS)
 out/audio/wav/*.wav + manifest.jsonl (正解テキスト付き)
 ```
@@ -61,9 +63,16 @@ uv run --project gemma_runtime python scripts/generate_sentences.py \
     --out out/sentences.jsonl \
     --sentences-per-term 3
 
-# 2. 例文 → 音声 (Qwen3-TTS)
-uv run python scripts/synthesize_speech.py \
+# 1b. 例文 → 読み仮名確認・tts_text 付与 (GPT-4o)  ※専門用語の誤読を防ぐために推奨
+export OPENAI_API_KEY=sk-...
+uv run python scripts/annotate_readings.py \
     --sentences out/sentences.jsonl \
+    --out out/sentences_annotated.jsonl
+
+# 2. 例文 → 音声 (Qwen3-TTS)
+#    annotate_readings.py を使った場合は sentences_annotated.jsonl を渡す
+uv run python scripts/synthesize_speech.py \
+    --sentences out/sentences_annotated.jsonl \
     --out-dir out/audio \
     --speaker Ono_Anna
 ```
@@ -80,6 +89,8 @@ uv run python scripts/synthesize_speech.py \
 | extract_terms.py | `--chunk-chars` | 3000 | Gemma に渡すチャンクの文字数 |
 | | `--min-count` | 1 | この回数以上のチャンクに出た用語のみ採用 |
 | | `--max-terms` | 0 (無制限) | 出力する用語数の上限 |
+| annotate_readings.py | `--model` | gpt-4o | 読み確認に使う OpenAI モデル |
+| | `--interval` | 0.5 | API 呼び出し間隔（秒） |
 | generate_sentences.py | `--sentences-per-term` | 3 | 用語あたりの例文数 |
 | | `--model` | google/gemma-4-E2B-it | Gemma モデル ID |
 | | `--temperature` | 0.8 | 生成の多様性 |

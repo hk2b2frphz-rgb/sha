@@ -101,7 +101,8 @@ def main() -> None:
     start = time.monotonic()
     with manifest_path.open("w", encoding="utf-8") as fh:
         for i, rec in enumerate(records, 1):
-            text = rec["sentence"]
+            # annotate_readings.py で付与した tts_text があればそちらを使う
+            text = rec.get("tts_text") or rec["sentence"]
             audio, sr = synthesize(model, args, text)
             wav_path = wav_dir / f"{rec['id']}.wav"
             sf.write(wav_path, audio, sr, subtype="PCM_16")
