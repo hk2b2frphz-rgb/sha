@@ -30,21 +30,19 @@ logger = logging.getLogger("generate_sentences")
 PROMPT_TEMPLATE = """\
 あなたは音声認識システムのテスト用例文を作成するアシスタントです。
 
-専門用語「{term}」の正確な読み仮名を確認し、その用語を含む自然な日本語の話し言葉の例文を{n}個作成してください。
+専門用語「{term}」について以下を答えてください。
 
-条件:
+1. この用語の正確な読み仮名（ひらがなのみ）
+2. この用語を自然に含む話し言葉の例文を{n}個
+
+例文の条件:
 - 各例文は 1 文で、話し言葉として自然に読み上げられる長さ (15〜40 文字程度)
 - 用語「{term}」を一字一句そのまま含めること
 - 例文同士は場面や文型を変えて多様にすること
 - 数字や記号は使わず、読み上げ可能な表現にすること
-- tts_text は sentence 中の「{term}」のみをひらがなに置換したもの（他の漢字はそのまま）
 
-出力は JSON 配列のみ。説明文は不要です。
-例:
-[
-  {{"sentence": "{term}が原因で入院した", "tts_text": "（{term}の読みをひらがなで置換した文）"}},
-  ...
-]
+出力は以下の JSON 形式のみ。説明文は不要です。
+{{"reading": "ひらがなの読み", "sentences": ["例文1", "例文2", ...]}}
 """
 
 
@@ -107,34 +105,23 @@ def result_to_text(result: Any) -> str:
     return str(result)
 
 
-def extract_pairs(raw: str, term: str) -> list[dict[str, str]]:
-    """Gemma 出力から {"sentence", "tts_text"} のリストを取り出す。
-    旧フォーマット（文字列配列）にもフォールバックする。"""
-    match = re.search(r"\[.*?\]", raw, re.DOTALL)
+def extract_result(raw: str, term: str) -> dict[str, Any] | None:
+    """Gemma 出力から {"reading": ..., "sentences": [...]} を取り出す。"""
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
-        return []
+        return None
     try:
-        items = json.loads(match.group(0))
+        data = json.loads(match.group(0))
     except json.JSONDecodeError:
-        return []
-
-    pairs: list[dict[str, str]] = []
-    for item in items:
-        if isinstance(item, dict):
-            sentence = str(item.get("sentence", "")).strip()
-            tts_text = str(item.get("tts_text", "")).strip()
-        elif isinstance(item, str):
-            # 旧フォーマットへのフォールバック
-            sentence = item.strip()
-            tts_text = sentence
-        else:
-            continue
-        if sentence and term in sentence:
-            pairs.append({"sentence": sentence, "tts_text": tts_text or sentence})
-        elif sentence:
-            logger.warning("用語「%s」を含まない例文を除外: %s", term, sentence[:30])
-
-    return pairs
+        return None
+    reading = str(data.get("reading", "")).strip()
+    sentences_raw = data.get("sentences", [])
+    if not isinstance(sentences_raw, list):
+        return None
+    sentences = [str(s).strip() for s in sentences_raw if str(s).strip() and term in str(s)]
+    if not reading or not sentences:
+        return None
+    return {"reading": reading, "sentences": sentences}
 
 
 def generate_for_term(pipe: Any, args: argparse.Namespace, term: str) -> list[dict[str, str]]:
@@ -151,9 +138,15 @@ def generate_for_term(pipe: Any, args: argparse.Namespace, term: str) -> list[di
             result = pipe(messages, **gen_kwargs)
         except TypeError:
             result = pipe(prompt, **gen_kwargs)
-        pairs = extract_pairs(result_to_text(result), term)
-        if pairs:
-            return pairs[: args.sentences_per_term]
+        extracted = extract_result(result_to_text(result), term)
+        if extracted:
+            reading = extracted["reading"]
+            pairs = []
+            for sentence in extracted["sentences"][: args.sentences_per_term]:
+                # 置換はモデルに任せず Python で確実に行う
+                tts_text = sentence.replace(term, reading)
+                pairs.append({"sentence": sentence, "tts_text": tts_text})
+            return pairs
         logger.warning("「%s」: 生成結果のパースに失敗 (attempt %d)", term, attempt + 1)
     return []
 
