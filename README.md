@@ -1,4 +1,4 @@
-# term2speech
+# term2speech (updated 2026-06-13)
 
 専門用語リストから Gemma 4 で発話例文を生成し、Qwen3-TTS で音声合成する。
 音声認識 (ASR) のテストデータ作成用。
