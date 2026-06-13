@@ -43,26 +43,48 @@ USER_PROMPT_TEMPLATE = """\
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="専門用語の読み仮名を GPT で確認し tts_text を付与する")
+    parser = argparse.ArgumentParser(description="専門用語の読み仮名を LLM API で確認し tts_text を付与する")
     parser.add_argument("--sentences", type=Path, required=True, help="generate_sentences.py の出力 JSONL")
     parser.add_argument("--out", type=Path, required=True, help="出力 JSONL パス")
-    parser.add_argument("--model", default="gpt-4o", help="使用する OpenAI モデル")
+    parser.add_argument("--provider", default="openai", choices=["openai", "gemini"],
+                        help="使用する API プロバイダ (default: openai)")
+    parser.add_argument("--model", default=None, help="モデル名（省略時はプロバイダのデフォルト）")
+    parser.add_argument("--base-url", default=None, help="OpenAI 互換 API の base URL（カスタム用）")
     parser.add_argument("--max-retries", type=int, default=2, help="JSON パース失敗時の再試行回数")
     parser.add_argument("--interval", type=float, default=0.5, help="API 呼び出し間隔（秒）")
     return parser.parse_args()
 
 
-def get_client() -> Any:
+PROVIDER_DEFAULTS = {
+    "openai": {
+        "base_url": None,
+        "env_key": "OPENAI_API_KEY",
+        "model": "gpt-4o",
+    },
+    "gemini": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "env_key": "GEMINI_API_KEY",
+        "model": "gemini-2.0-flash",
+    },
+}
+
+
+def get_client(args: argparse.Namespace) -> Any:
     try:
         from openai import OpenAI
     except ImportError:
         logger.error("openai パッケージが見つかりません。`uv add openai` でインストールしてください。")
         sys.exit(1)
-    api_key = os.environ.get("OPENAI_API_KEY")
+    defaults = PROVIDER_DEFAULTS.get(args.provider, PROVIDER_DEFAULTS["openai"])
+    api_key = os.environ.get(defaults["env_key"])
     if not api_key:
-        logger.error("OPENAI_API_KEY 環境変数が設定されていません。")
+        logger.error("%s 環境変数が設定されていません。", defaults["env_key"])
         sys.exit(1)
-    return OpenAI(api_key=api_key)
+    base_url = args.base_url or defaults["base_url"]
+    kwargs: dict[str, Any] = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    return OpenAI(**kwargs)
 
 
 def annotate(client: Any, model: str, term: str, sentence: str, max_retries: int) -> dict[str, str]:
@@ -108,7 +130,10 @@ def main() -> None:
     records = load_sentences(args.sentences)
     logger.info("%d 文の読み仮名を確認します (model=%s)", len(records), args.model)
 
-    client = get_client()
+    if args.model is None:
+        args.model = PROVIDER_DEFAULTS.get(args.provider, PROVIDER_DEFAULTS["openai"])["model"]
+    logger.info("プロバイダ: %s  モデル: %s", args.provider, args.model)
+    client = get_client(args)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     failed: list[str] = []
