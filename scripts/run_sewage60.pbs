@@ -1,0 +1,88 @@
+#!/bin/bash
+# PBS job: sewage 60-term reading benchmark — Gemma E4B/E2B inference + method comparison.
+#
+# What it does (one shot):
+#   1. install pyopenjtalk + dict/eval deps into the gemma_runtime uv env
+#   2. run Gemma E4B on data/benchmark_terms_sewage_60_cases.tsv  -> *_sewage60_e4b_neweval.json
+#   3. run Gemma E2B on the same cases                            -> *_sewage60_e2b_neweval.json
+#   4. run experiments/run_method_comparison.py                   -> comparison_results.json / comparison_report.md
+#      (dict resolvers + LLM saved preds + SmartHybrid, with McNemar / Wilcoxon / oracle upper-bound)
+#
+# Submit (this cluster):
+#   xvn_s scripts/run_sewage60.pbs
+#   xvn_s -v E4B_MODEL=google/gemma-4-E4B-it,E2B_MODEL=google/gemma-4-E2B-it scripts/run_sewage60.pbs
+#   # plain PBS equivalent: qsub scripts/run_sewage60.pbs
+#
+# Before submitting:
+#   git fetch && git checkout feature/reading-eval-harness-20260614 && git pull
+#   mkdir -p logs
+#
+# Logs: logs/  (stdout+stderr merged)
+#
+# NOTE: adjust the resource line (-l) and queue (-q) to match the cluster.
+#PBS -N sewage60_eval
+#PBS -l select=1:ncpus=8:ngpus=1:mem=64gb
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o logs/
+## Uncomment and edit if the cluster requires an explicit queue
+##PBS -q gpu
+
+set -euo pipefail
+
+# Jobs start in $HOME; move to the directory the job was submitted from.
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+# Uncomment if the cluster loads CUDA via modules
+# module load cuda/12.1
+
+E4B_MODEL="${E4B_MODEL:-google/gemma-4-E4B-it}"
+E2B_MODEL="${E2B_MODEL:-google/gemma-4-E2B-it}"
+CASES="data/benchmark_terms_sewage_60_cases.tsv"
+TODAY="$(date +%F)"
+E4B_OUT="experiments/${TODAY}_sewage60_e4b_neweval.json"
+E2B_OUT="experiments/${TODAY}_sewage60_e2b_neweval.json"
+
+mkdir -p experiments logs
+
+echo "=== node: $(hostname) / GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo unknown) ==="
+echo "=== cases: $CASES / E4B: $E4B_MODEL / E2B: $E2B_MODEL ==="
+
+# --- STEP 0/3: deps (gold/method side runs inside the same uv env) ---
+echo "=== STEP 0/3: install eval deps (pyopenjtalk + dict backends + scipy) ==="
+uv run --project gemma_runtime python -m pip install -q \
+    pyopenjtalk sudachipy sudachidict-core fugashi unidic-lite scipy
+
+# --- STEP 1/3: Gemma E4B inference (saved predictions) ---
+echo "=== STEP 1/3: Gemma E4B -> $E4B_OUT ==="
+uv run --project gemma_runtime python scripts/run_eval.py \
+    --cases "$CASES" \
+    --provider gemma \
+    --model "$E4B_MODEL" \
+    --out "$E4B_OUT"
+
+# --- STEP 2/3: Gemma E2B inference (saved predictions) ---
+echo "=== STEP 2/3: Gemma E2B -> $E2B_OUT ==="
+uv run --project gemma_runtime python scripts/run_eval.py \
+    --cases "$CASES" \
+    --provider gemma \
+    --model "$E2B_MODEL" \
+    --out "$E2B_OUT"
+
+# --- STEP 3/3: method comparison + significance tests ---
+# deps were installed above, so skip the runner's own pip attempts.
+echo "=== STEP 3/3: method comparison (McNemar / Wilcoxon / oracle) ==="
+uv run --project gemma_runtime python experiments/run_method_comparison.py \
+    --no-install \
+    --out-json experiments/comparison_results.json \
+    --out-md experiments/comparison_report.md
+
+echo ""
+echo "=== done ==="
+echo "predictions : $E4B_OUT"
+echo "              $E2B_OUT"
+echo "comparison  : experiments/comparison_results.json"
+echo "report      : experiments/comparison_report.md"
+echo ""
+echo "=== Key Findings (tail of report) ==="
+sed -n '/## Key Findings/,$p' experiments/comparison_report.md || true

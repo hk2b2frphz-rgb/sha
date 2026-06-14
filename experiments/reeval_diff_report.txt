@@ -1,0 +1,15 @@
+Reading evaluation harness re-evaluation diff report
+Generated: 2026-06-14
+
+file	old_metric	old_acc	new_exact_acc	delta	n_eval	n_missing_gold	avg_mer
+2026-06-13_e2b_eval.json	acc_reading_correct	0.7333	0.800000	0.066700	45	0	0.362645
+2026-06-13_e2b_neweval.json	acc_reading_correct	0.6	0.600000	0.000000	30	0	0.394087
+2026-06-13_e4b_eval.json	acc_reading_correct	0.5333	0.600000	0.066700	45	0	0.849974
+2026-06-13_e4b_neweval.json	acc_reading_correct	0.8333	0.833333	0.000033	30	0	0.186071
+2026-06-13_sewage_e2b_eval.json	acc_reading_correct	0.2444	0.244444	0.000044	45	0	2.111746
+2026-06-13_sewage_e4b_eval.json	acc_reading_correct	0.5333	0.533333	0.000033	45	0	1.296349
+
+Notes:
+- Existing JSON files were read only; no experiment JSON was overwritten.
+- Legacy outputs can contain full sentences or extra generation tokens, so the harness counts a normalized contained gold reading as exact for compatibility.
+- Gold readings are loaded from curated TSV files only; evaluated dictionary methods must not generate gold references.
