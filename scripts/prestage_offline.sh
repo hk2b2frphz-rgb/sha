@@ -66,19 +66,14 @@ warm(os.environ.get("TTS_MODEL"))
 print("[prestage] HF cache dir:", os.environ.get("HF_HOME") or "~/.cache/huggingface (default)")
 PY
 
-# Kokoro runs in an isolated uv env (deps conflict with the project) and lazily
-# downloads several things at first synthesis: the unidic dictionary, the
-# pyopenjtalk open_jtalk dict, misaki[ja] data, and the Kokoro model. Warm ALL of
-# them here by building the env and running one real synthesis, so an OFFLINE
-# training run needs no network. Uses the SAME --with set as run_whisper_train.pbs
-# so uv reuses the cached env (and its downloaded dictionaries). Skip with
-# PRESTAGE_KOKORO=0.
+# Kokoro runs in an isolated uv env (deps conflict with the project). Build that
+# env from cache-able wheels and fetch its unidic dictionary + the Kokoro model,
+# so an OFFLINE training run can reuse them. Skip with PRESTAGE_KOKORO=0.
 if [[ "${PRESTAGE_KOKORO:-1}" == "1" ]]; then
-    echo "===== prestage 3b/3: Kokoro isolated env + dictionaries ====="
+    echo "===== prestage 3b/3: Kokoro isolated env ====="
     TORCH_VERSION="$(uv run python -c 'import torch; print(torch.__version__)')"
     TORCHAUDIO_VERSION="$(uv run python -c 'import torchaudio; print(torchaudio.__version__)')"
     KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
-    KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
     KOKORO_UV=(
         uv run --isolated --no-project
         --index "pytorch-cu121=https://download.pytorch.org/whl/cu121"
@@ -91,23 +86,9 @@ if [[ "${PRESTAGE_KOKORO:-1}" == "1" ]]; then
         --with "torch==$TORCH_VERSION"
         --with "torchaudio==$TORCHAUDIO_VERSION"
     )
-    echo "[prestage] fetching unidic dictionary..."
     "${KOKORO_UV[@]}" python -m unidic download
-    echo "[prestage] warming Kokoro with one synthesis (pulls model + pyopenjtalk/misaki dict)..."
-    warm_dir="out/whisper_turbo/_kokoro_warm"
-    mkdir -p "$warm_dir"
-    # One Japanese warm sentence (needed to trigger the JP dictionary downloads).
-    # This .sh runs on the login node via `bash`, not qsub, so a UTF-8 literal is
-    # fine here (the no-Japanese rule is only for .pbs jobs).
-    "${KOKORO_UV[@]}" python -c "import json,sys; open(sys.argv[1],'w',encoding='utf-8').write(json.dumps({'id':'warm_0001','sentence':'これはテストです'},ensure_ascii=False)+'\n')" "$warm_dir/sentences.jsonl"
-    # CPU on the login node (no GPU there); this just triggers the downloads.
-    "${KOKORO_UV[@]}" python scripts/synthesize_speech_kokoro.py \
-        --sentences "$warm_dir/sentences.jsonl" \
-        --out-dir "$warm_dir" \
-        --model-id "$KOKORO_MODEL" \
-        --voice "$KOKORO_VOICE" \
-        --device cpu
-    echo "[prestage] Kokoro warm synth OK -> $warm_dir/wav/warm_0001.wav"
+    KOKORO_MODEL="$KOKORO_MODEL" "${KOKORO_UV[@]}" python -c \
+        "import os; from huggingface_hub import snapshot_download; print('[prestage] cached', snapshot_download(os.environ['KOKORO_MODEL']))"
 fi
 
 echo "===== prestage done ====="
