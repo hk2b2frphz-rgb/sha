@@ -86,8 +86,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 def main() -> None:
     args = parse_args()
 
+    import numpy as np
     import torch
-    from datasets import Audio, Dataset
+    from datasets import Dataset
     from peft import LoraConfig, get_peft_model
     from transformers import (
         Seq2SeqTrainer,
@@ -111,16 +112,30 @@ def main() -> None:
         raise SystemExit(f"学習manifestが空です: {args.manifest}")
     print(f"[train] {len(rows)} training examples")
 
-    dataset = Dataset.from_list(rows).cast_column("audio", Audio(sampling_rate=16000))
+    dataset = Dataset.from_list(rows)
 
     feature_extractor = processor.feature_extractor
     tokenizer = processor.tokenizer
     max_label_len = args.max_label_len
 
+    # datasets の Audio 特徴量デコードは新しめの版で torchcodec/ffmpeg を要求し
+    # map() が落ちることがある。soundfile + librosa で自前デコードして回避する
+    # (16kHzモノラルへ変換)。
+    import librosa
+    import soundfile as sf
+
+    def load_16k_mono(path: str) -> "np.ndarray":
+        wav, sr = sf.read(path, dtype="float32", always_2d=False)
+        if getattr(wav, "ndim", 1) > 1:
+            wav = wav.mean(axis=1)
+        if sr != 16000:
+            wav = librosa.resample(wav, orig_sr=sr, target_sr=16000)
+        return np.ascontiguousarray(wav, dtype="float32")
+
     def prepare(batch: dict[str, Any]) -> dict[str, Any]:
-        audio = batch["audio"]
+        wav = load_16k_mono(batch["audio"])
         batch["input_features"] = feature_extractor(
-            audio["array"], sampling_rate=audio["sampling_rate"]
+            wav, sampling_rate=16000
         ).input_features[0]
         batch["labels"] = tokenizer(batch["text"]).input_ids[:max_label_len]
         return batch

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #PBS -S /bin/bash
 #PBS -N ws_turbo_train
-#PBS -q xan_s
-#PBS -l select=1:res=middle
+#PBS -q xvn_s
+#PBS -l select=1:res=middle2
 #PBS -l walltime=24:00:00
 #PBS -j oe
 #PBS -V
 
 # generated_sentences.csv -> TTS (multi-GPU parallel) -> whisper-large-v3-turbo
 # LoRA fine-tune -> merge LoRA -> CTranslate2 convert.
-# DEFAULT node: queue xan_s, res=middle = A100 x2. TTS backend defaults to Kokoro
+# DEFAULT node: queue xvn_s, res=middle2 = V100 x4. TTS backend defaults to Kokoro
 # (fast); pass TTS_BACKEND=qwen3 for Qwen3-TTS instead.
 #
 # Training data (TTS audio + manifest) is built once and reused. If TRAIN_MANIFEST
@@ -19,12 +19,14 @@
 # NUM_SHARDS sets both GPU count and DDP processes; GPUs are auto-derived from it.
 #
 # Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
-#   # default: A100 x2 (xan_s/res=middle), Kokoro TTS, online:
-#   qsub -v "PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+#   # default: V100 x4 (xvn_s/res=middle2), Kokoro TTS:
+#   qsub scripts/run_whisper_train.pbs
 #   # Qwen3-TTS instead of Kokoro:
-#   qsub -v "TTS_BACKEND=qwen3,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
-#   # V100 x4 offline on res=middle2 (after scripts/prestage_offline.sh):
-#   qsub -q xvn_s -l select=1:res=middle2 -v "OFFLINE=1,NUM_SHARDS=4" scripts/run_whisper_train.pbs
+#   qsub -v TTS_BACKEND=qwen3 scripts/run_whisper_train.pbs
+#   # audio already built -> re-train on a single V100 (TTS is skipped via reuse):
+#   qsub -l select=1:res=small -v NUM_SHARDS=1 scripts/run_whisper_train.pbs
+#   # A100 x2 (faster TTS) on xan_s:
+#   qsub -q xan_s -l select=1:res=middle -v NUM_SHARDS=2 scripts/run_whisper_train.pbs
 #
 # TTS progress is printed to this log as [tts-progress] every PROGRESS_EVERY sec
 # (default 30). Per-utterance detail with ETA is in out/.../tts_data/shard_*.log.
@@ -57,12 +59,13 @@ MERGED_DIR="${MERGED_DIR:-$WORK_ROOT/merged_hf}"
 CT2_DIR="${CT2_DIR:-$WORK_ROOT/ct2}"
 
 # NUM_SHARDS = number of GPUs used for parallel TTS and for DDP training.
-#   default 2 (xan_s/res=middle = A100 x2); pass NUM_SHARDS=4 for res=middle2.
+#   default 4 (xvn_s/res=middle2 = V100 x4); NUM_SHARDS=1 to re-train on a single
+#   GPU (audio reused so TTS is skipped); NUM_SHARDS=2 for A100 res=middle.
 # Derive CUDA_VISIBLE_DEVICES from NUM_SHARDS so callers never need to pass a
 # comma-separated list via `qsub -v` (the comma would split into bogus vars).
 # `#PBS -V` can also inherit a stale single-GPU value; deriving here avoids that.
 # To pin specific GPUs, pass GPU_LIST=0,2 instead.
-NUM_SHARDS="${NUM_SHARDS:-2}"
+NUM_SHARDS="${NUM_SHARDS:-4}"
 if [[ -n "${GPU_LIST:-}" ]]; then
     CUDA_VISIBLE_DEVICES="$GPU_LIST"
 else
@@ -74,7 +77,8 @@ export CUDA_VISIBLE_DEVICES
 TTS_BACKEND="${TTS_BACKEND:-kokoro}"
 TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"
 TTS_SPEAKER="${TTS_SPEAKER:-Ono_Anna}"
-TTS_DTYPE="${TTS_DTYPE:-bfloat16}"
+# V100 has no bf16; default float16. (Only used by the qwen3 backend.)
+TTS_DTYPE="${TTS_DTYPE:-float16}"
 # Kokoro Japanese preset voice (jf_alpha/jf_gongitsune/jf_tebukuro women, jm_kumo man)
 KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
 KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
