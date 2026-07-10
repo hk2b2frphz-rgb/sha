@@ -16,6 +16,25 @@ whisper-streaming で評価する、ワンパスの手順。
 - `manifest.txt` の先頭非コメント行を、HPC上の whisper-large-v3-turbo 重みパスに書き換える
   (既定は `openai/whisper-large-v3-turbo`)。
 
+## ネットワーク遮断ノード (res=middle2) 向け: オフライン実行
+
+4GPUノード(`res=middle2`)は**外部ネット非接続**のことが多い。その場合、ネットに出られる
+ノード(ログイン or `res=small`)で先にキャッシュを用意してから、学習を `OFFLINE=1` で回す。
+共有ファイルシステム(リポジトリ配下 + `~/.cache/huggingface`)経由でmiddle2が読む。
+
+```bash
+# 1) ネット可能ノード(ログイン等)で事前DL: .venv + HFキャッシュ(Qwen3-TTS/whisper) + vendor
+PROXY_URL=http://user:pass%40@host:port bash scripts/prestage_offline.sh
+
+# 2) 学習はGPUノードでオフライン実行
+qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
+```
+
+`OFFLINE=1` で `UV_OFFLINE`/`HF_HUB_OFFLINE`/`TRANSFORMERS_OFFLINE` を立て、`uv sync` は
+キャッシュのみ、モデルDLもキャッシュから読む。ノードがネットに繋がる場合は不要。
+
+疎通確認(学習と同じノード種別で): `qsub -l select=1:res=middle2 -v "PROXY_URL=..." scripts/run_net_check.pbs`
+
 ## 1. 学習 (データ生成 + LoRA FT + CT2変換)
 
 スクリプトには `#PBS -V` があるので、上書き変数は **`qsub -v VAR=値`** で明示的に渡す

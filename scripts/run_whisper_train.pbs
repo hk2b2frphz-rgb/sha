@@ -14,20 +14,32 @@
 # already exists, the TTS build step is skipped, so re-runs only re-train with new
 # hyper-parameters. Pass FORCE_REBUILD_DATA=1 to rebuild the audio.
 #
+# NETWORK: res=middle2 (4-GPU) nodes usually have NO internet. First run
+#   scripts/prestage_offline.sh on a networked node (login/small) to fill the
+#   .venv and HF cache, then submit this job with OFFLINE=1 (uses cache only).
+#
 # Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
-#   qsub scripts/run_whisper_train.pbs
-#   qsub -v CSV=data/generated_sentences.csv scripts/run_whisper_train.pbs
-#   qsub -v "EPOCHS=8,LORA_R=64" scripts/run_whisper_train.pbs
-#   qsub -v "PROXY_URL=http://user:pass@proxy.example.com:8080" scripts/run_whisper_train.pbs
+#   qsub -v OFFLINE=1 scripts/run_whisper_train.pbs          # after prestage (typical)
+#   qsub -v "OFFLINE=1,EPOCHS=8,LORA_R=64" scripts/run_whisper_train.pbs
 #   qsub -v FORCE_REBUILD_DATA=1 scripts/run_whisper_train.pbs
+#   # networked node only:
+#   qsub -v "PROXY_URL=http://user:pass@proxy.example.com:8080" scripts/run_whisper_train.pbs
 
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 
-# Configure http(s)_proxy for uv sync / HF download / git clone on the cluster.
-if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
-    # shellcheck source=/dev/null
-    source "$PWD/scripts/setup_proxy.sh"
+# OFFLINE=1: this node has no network (e.g. res=middle2). Use the .venv and HF
+# cache prepared beforehand by scripts/prestage_offline.sh on a networked node.
+OFFLINE="${OFFLINE:-0}"
+if [[ "$OFFLINE" == "1" ]]; then
+    echo "OFFLINE=1: using prestaged .venv and HF cache (no network access)"
+    export UV_OFFLINE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+else
+    # Configure http(s)_proxy for uv sync / HF download on networked nodes.
+    if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$PWD/scripts/setup_proxy.sh"
+    fi
 fi
 
 CSV="${CSV:-data/generated_sentences.csv}"
@@ -90,14 +102,24 @@ if [[ ! -s "$CSV" ]]; then
     exit 1
 fi
 
-echo "===== network preflight ====="
-echo "http_proxy=${http_proxy:-unset}  https_proxy=${https_proxy:-unset}"
-echo "no_proxy=${no_proxy:-unset}"
-export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
-export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-60}"
-echo "UV_HTTP_TIMEOUT=$UV_HTTP_TIMEOUT  HF_HUB_DOWNLOAD_TIMEOUT=$HF_HUB_DOWNLOAD_TIMEOUT"
-echo "===== uv sync (verbose) ====="
-uv sync -v
+if [[ "$OFFLINE" == "1" ]]; then
+    echo "===== uv sync (offline, cache only) ====="
+    echo "UV_OFFLINE=$UV_OFFLINE HF_HUB_OFFLINE=$HF_HUB_OFFLINE TRANSFORMERS_OFFLINE=$TRANSFORMERS_OFFLINE"
+    if [[ ! -d .venv ]]; then
+        echo "ERROR: .venv not found. Run scripts/prestage_offline.sh on a networked node first." >&2
+        exit 1
+    fi
+    uv sync --offline
+else
+    echo "===== network preflight ====="
+    echo "http_proxy=${http_proxy:-unset}  https_proxy=${https_proxy:-unset}"
+    echo "no_proxy=${no_proxy:-unset}"
+    export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
+    export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-60}"
+    echo "UV_HTTP_TIMEOUT=$UV_HTTP_TIMEOUT  HF_HUB_DOWNLOAD_TIMEOUT=$HF_HUB_DOWNLOAD_TIMEOUT"
+    echo "===== uv sync (verbose) ====="
+    uv sync -v
+fi
 
 # ---- step 1/4: build TTS training data (reuse if it already exists) ---------
 if [[ -s "$TRAIN_MANIFEST" && "$FORCE_REBUILD_DATA" != "1" ]]; then
