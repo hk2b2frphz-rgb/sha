@@ -18,6 +18,12 @@
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 
+# Configure http(s)_proxy for uv sync / git clone on the cluster.
+if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$PWD/scripts/setup_proxy.sh"
+fi
+
 CONFIG="${CONFIG:-configs/whisper_streaming_eval.yaml}"
 MODEL_DIR="${MODEL_DIR:-out/whisper_turbo/ct2}"
 WAV_DIR="${WAV_DIR:-data/test_wav}"
