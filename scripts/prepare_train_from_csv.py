@@ -18,6 +18,7 @@ import argparse
 import csv
 import json
 import sys
+import unicodedata
 from pathlib import Path
 
 # CSVヘッダの表記ゆれを吸収する (Sentance は原typo、Sentence も許容)。
@@ -78,14 +79,30 @@ def main() -> None:
             rec_id = f"{args.id_prefix}_{int(num):04d}"
 
             if term and reading:
-                if term not in sentence:
-                    # 表層が一致せず置換されない = TTSが漢字を誤読する恐れ。警告のみ。
-                    missing_term += 1
-                    print(
-                        f"[WARN] {rec_id}: Word '{term}' が Sentance 内に見つからず置換されません",
-                        file=sys.stderr,
-                    )
-                tts_text = sentence.replace(term, reading)
+                if term in sentence:
+                    tts_text = sentence.replace(term, reading)
+                else:
+                    # 全角/半角や合成文字(NFC/NFD)の差で in が外れることがある。
+                    # NFKC正規化して再照合し、一致すればそちらで置換する。
+                    n_term = unicodedata.normalize("NFKC", term)
+                    n_sentence = unicodedata.normalize("NFKC", sentence)
+                    if n_term in n_sentence:
+                        tts_text = n_sentence.replace(n_term, reading)
+                        print(
+                            f"[INFO] {rec_id}: Word を NFKC正規化後に一致・置換 "
+                            f"(元データに全角/半角等の表記ゆれ)",
+                            file=sys.stderr,
+                        )
+                    else:
+                        # 置換されない = TTSが漢字を誤読する恐れ。実タイポ判別のため文も出す。
+                        missing_term += 1
+                        snippet = sentence if len(sentence) <= 50 else sentence[:50] + "..."
+                        print(
+                            f"[WARN] {rec_id}: Word '{term}' が発話文に見つからず置換されません "
+                            f'| 発話文="{snippet}"',
+                            file=sys.stderr,
+                        )
+                        tts_text = sentence
             else:
                 tts_text = sentence
 
