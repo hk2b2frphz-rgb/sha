@@ -42,13 +42,16 @@ qsub -V scripts/run_whisper_train.pbs
 
 ## 2. 評価 (共有 test wav を whisper-streaming で推論)
 
-test wav 群を `data/test_wav/` などに置く。参照テキストがあれば
-`key<TAB>text` の TSV (`key` は wav ファイル名 or stem) を用意する。
+test wav 群を `data/test_wav/` などに置く。参照テキスト(正解)があれば以下いずれかで用意する:
+
+- **位置対応(推奨)**: 1行1正解テキストのみ。wav の順番(自然順ソート: `1.wav, 2.wav, 10.wav`)
+  と行番号で対応付ける。キー列は不要。
+- キー付きTSV: `key<TAB>text` (`key` は wav ファイル名 or stem)。行にタブがあればこちらと判定。
 
 ```bash
 WAV_DIR=data/test_wav qsub -V scripts/run_whisper_eval.pbs
-# 参照ありで CER/WER も出す場合:
-WAV_DIR=data/test_wav REFS=data/test_refs.tsv qsub -V scripts/run_whisper_eval.pbs
+# 参照ありで CER/WER も出す場合 (位置対応ファイル):
+WAV_DIR=data/test_wav REFS=data/test_refs.txt qsub -V scripts/run_whisper_eval.pbs
 ```
 
 `build_test_manifest.py` が `test_manifest.jsonl` を作り、

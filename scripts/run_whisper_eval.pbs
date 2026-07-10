@@ -7,12 +7,12 @@
 #PBS -j oe
 #PBS -V
 
-# FT+CT2変換した whisper を whisper-streaming で評価する。res=small = V100×1。
-# 対象は共有された test wav 群。参照テキストがあれば CER/WER も出す。
+# Evaluate the FT+CT2 whisper model with whisper-streaming on shared test wavs.
+# res=small = V100 x1. If references are provided, CER/WER are also computed.
 #
 # Submit:
 #   WAV_DIR=data/test_wav qsub -V scripts/run_whisper_eval.pbs
-#   WAV_DIR=data/test_wav REFS=data/test_refs.tsv qsub -V scripts/run_whisper_eval.pbs
+#   WAV_DIR=data/test_wav REFS=data/test_refs.txt qsub -V scripts/run_whisper_eval.pbs
 #   MODEL_DIR=out/whisper_turbo/ct2 MANIFEST=out/whisper_turbo/test_manifest.jsonl qsub -V scripts/run_whisper_eval.pbs
 
 set -euo pipefail
@@ -48,7 +48,7 @@ echo "========================================"
 command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
 if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
 if [[ ! -d "$MODEL_DIR" ]]; then
-    echo "ERROR: CT2モデルが無い: $MODEL_DIR (先に run_whisper_train.pbs を実行)" >&2
+    echo "ERROR: CT2 model dir not found: $MODEL_DIR (run run_whisper_train.pbs first)" >&2
     exit 1
 fi
 
@@ -60,7 +60,7 @@ fi
 git -C "$WHISPER_STREAMING_DIR" fetch --depth 1 origin "$WHISPER_STREAMING_REF" || true
 git -C "$WHISPER_STREAMING_DIR" checkout "$WHISPER_STREAMING_REF"
 
-# test manifest を組む (既存なら再利用しない: wav群が変わる可能性があるため毎回作る)
+# Build the test manifest fresh each run (the shared wav set may change).
 build_args=(uv run python scripts/build_test_manifest.py --wav-dir "$WAV_DIR" --out "$MANIFEST")
 if [[ -n "$REFS" ]]; then build_args+=(--references "$REFS"); fi
 "${build_args[@]}"

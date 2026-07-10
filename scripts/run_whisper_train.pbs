@@ -7,12 +7,12 @@
 #PBS -j oe
 #PBS -V
 
-# generated_sentences.csv -> Qwen3-TTS(4GPU並列) -> whisper-large-v3-turbo LoRA FT
-# -> LoRAマージ -> CT2 Whisper変換。res=middle2 = V100×4。
+# generated_sentences.csv -> Qwen3-TTS (4-GPU parallel) -> whisper-large-v3-turbo
+# LoRA fine-tune -> merge LoRA -> CTranslate2 convert. res=middle2 = V100 x4.
 #
-# 学習データ(TTS音声+manifest)は一度作れば再利用する。TRAIN_MANIFEST が既に
-# 存在すれば TTS生成をスキップする (再学習時はハイパラだけ変えて再投入できる)。
-# 作り直したいときは FORCE_REBUILD_DATA=1 を渡す。
+# Training data (TTS audio + manifest) is built once and reused. If TRAIN_MANIFEST
+# already exists, the TTS build step is skipped, so re-runs only re-train with new
+# hyper-parameters. Pass FORCE_REBUILD_DATA=1 to rebuild the audio.
 #
 # Submit:
 #   qsub -V scripts/run_whisper_train.pbs
@@ -75,24 +75,24 @@ echo "============================================="
 command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
 if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
 if [[ "${#GPU_IDS[@]}" -lt "$NUM_SHARDS" ]]; then
-    echo "ERROR: GPUが ${#GPU_IDS[@]} 枚しか無いのに NUM_SHARDS=$NUM_SHARDS" >&2
+    echo "ERROR: only ${#GPU_IDS[@]} GPU(s) available but NUM_SHARDS=$NUM_SHARDS" >&2
     exit 1
 fi
 if [[ ! -s "$CSV" ]]; then
-    echo "ERROR: CSV が無い/空: $CSV" >&2
+    echo "ERROR: CSV is missing or empty: $CSV" >&2
     exit 1
 fi
 
 uv sync
 
-# ---- step 1/4: 学習データ(TTS)生成。既存なら再利用 --------------------------
+# ---- step 1/4: build TTS training data (reuse if it already exists) ---------
 if [[ -s "$TRAIN_MANIFEST" && "$FORCE_REBUILD_DATA" != "1" ]]; then
-    echo "===== step 1/4: TTS学習データは既存 -> 再利用 ($TRAIN_MANIFEST) ====="
+    echo "===== step 1/4: reusing existing TTS training data ($TRAIN_MANIFEST) ====="
 else
-    echo "===== step 1/4: TTS学習データを生成 (4GPU並列) ====="
+    echo "===== step 1/4: building TTS training data (4-GPU parallel) ====="
     uv run python scripts/prepare_train_from_csv.py --input "$CSV" --out "$TTS_INPUT"
 
-    # tts_input を NUM_SHARDS 個に分割
+    # split tts_input into NUM_SHARDS parts
     uv run python - "$TTS_INPUT" "$DATA_ROOT" "$NUM_SHARDS" <<'PY'
 import sys
 from pathlib import Path
@@ -128,7 +128,7 @@ PY
     failed=0
     for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
     if [[ "$failed" != "0" ]]; then
-        echo "ERROR: TTSシャードが失敗。$DATA_ROOT/shard_*.log を確認" >&2
+        echo "ERROR: a TTS shard failed. See $DATA_ROOT/shard_*.log" >&2
         exit 1
     fi
 
@@ -145,7 +145,7 @@ test -s "$TRAIN_MANIFEST"
 echo "train rows: $(grep -c . "$TRAIN_MANIFEST")"
 
 # ---- step 2/4: LoRA fine-tune (DDP) ----------------------------------------
-echo "===== step 2/4: LoRA fine-tune (${NUM_SHARDS} GPU DDP) ====="
+echo "===== step 2/4: LoRA fine-tune (${NUM_SHARDS}-GPU DDP) ====="
 uv run accelerate launch --num_processes "$NUM_SHARDS" --mixed_precision fp16 \
     scripts/train_whisper_lora.py \
     --manifest "$TRAIN_MANIFEST" \
@@ -161,8 +161,8 @@ uv run accelerate launch --num_processes "$NUM_SHARDS" --mixed_precision fp16 \
     --lora-alpha "$LORA_ALPHA"
 test -d "$MERGED_DIR"
 
-# ---- step 3/4: CT2 変換 -----------------------------------------------------
-echo "===== step 3/4: CTranslate2 変換 ====="
+# ---- step 3/4: CTranslate2 conversion --------------------------------------
+echo "===== step 3/4: CTranslate2 conversion ====="
 rm -rf "$CT2_DIR"
 uv run ct2-transformers-converter \
     --model "$MERGED_DIR" \
@@ -171,8 +171,8 @@ uv run ct2-transformers-converter \
     --copy_files tokenizer.json preprocessor_config.json
 test -s "$CT2_DIR/model.bin"
 
-# ---- step 4/4: 完了 ---------------------------------------------------------
-echo "===== step 4/4: 完了 ====="
+# ---- step 4/4: done --------------------------------------------------------
+echo "===== step 4/4: done ====="
 echo "ct2_model_dir: $CT2_DIR"
-echo "評価は:  MODEL_DIR=$CT2_DIR MANIFEST=<test_manifest.jsonl> qsub -V scripts/run_whisper_eval.pbs"
+echo "evaluate with: MODEL_DIR=$CT2_DIR MANIFEST=<test_manifest.jsonl> qsub -V scripts/run_whisper_eval.pbs"
 echo "finished_at:   $(date -Iseconds)"
