@@ -105,6 +105,7 @@ if [[ -s "$TRAIN_MANIFEST" && "$FORCE_REBUILD_DATA" != "1" ]]; then
 else
     echo "===== step 1/4: building TTS training data (4-GPU parallel) ====="
     uv run python scripts/prepare_train_from_csv.py --input "$CSV" --out "$TTS_INPUT"
+    echo "term mismatch report: $(dirname "$TTS_INPUT")/term_mismatch.tsv  (cat to inspect)"
 
     # split tts_input into NUM_SHARDS parts
     uv run python - "$TTS_INPUT" "$DATA_ROOT" "$NUM_SHARDS" <<'PY'

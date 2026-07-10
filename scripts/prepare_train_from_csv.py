@@ -35,6 +35,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, required=True, help="generated_sentences.csv")
     parser.add_argument("--out", type=Path, required=True, help="出力JSONL")
     parser.add_argument("--id-prefix", default="gs")
+    parser.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="用語不一致の一覧TSV出力先 (既定: <out>と同ディレクトリの term_mismatch.tsv)",
+    )
     return parser.parse_args()
 
 
@@ -66,6 +72,7 @@ def main() -> None:
     written = 0
     skipped = 0
     missing_term = 0
+    mismatches: list[tuple[str, str, str, str]] = []  # (id, term, reading, sentence)
     with args.out.open("w", encoding="utf-8") as out_fh:
         for i, row in enumerate(rows, 1):
             sentence = (row.get(col_sentence) or "").strip()
@@ -96,6 +103,7 @@ def main() -> None:
                     else:
                         # 置換されない = TTSが漢字を誤読する恐れ。実タイポ判別のため文も出す。
                         missing_term += 1
+                        mismatches.append((rec_id, term, reading, sentence))
                         snippet = sentence if len(sentence) <= 50 else sentence[:50] + "..."
                         print(
                             f"[WARN] {rec_id}: Word '{term}' が発話文に見つからず置換されません "
@@ -123,10 +131,28 @@ def main() -> None:
 
     if not written:
         raise SystemExit(f"有効な行がありません: {args.input}")
+
+    report_path = args.report or (args.out.parent / "term_mismatch.tsv")
+    # 不一致の一覧を必ず1ファイルに書き出す (HPCで cat 1発で確認できるように)。
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with report_path.open("w", encoding="utf-8") as rep:
+        rep.write("id\tterm\treading\tsentence\n")
+        for rec_id, term, reading, sentence in mismatches:
+            rep.write(f"{rec_id}\t{term}\t{reading}\t{sentence}\n")
+
     print(
         f"wrote {written} records -> {args.out} "
         f"(skipped_empty={skipped}, term_not_found={missing_term})"
     )
+    # 末尾サマリ: ログにも一覧を残す。cat する時のパスも明示。
+    print("===== TERM MISMATCH SUMMARY =====")
+    print(f"mismatches: {len(mismatches)}  report: {report_path}")
+    if mismatches:
+        for rec_id, term, _reading, sentence in mismatches:
+            print(f'  {rec_id}\tWord="{term}"\t発話文="{sentence}"')
+        print(f"確認: cat {report_path}")
+    else:
+        print("  (用語不一致なし)")
 
 
 if __name__ == "__main__":
