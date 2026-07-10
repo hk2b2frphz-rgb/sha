@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N ws_eval_tts
+#PBS -q xvn_s
+#PBS -l select=1:res=small
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -V
+
+# 例文txt -> Qwen3-TTS音声評価データ。
+#
+# Submit:
+#   qsub -V scripts/run_asr_eval_data_tts.pbs
+#   SENTENCES_TXT=data/asr_eval_sentences.txt OUT_DIR=out/whisper_streaming_eval/audio qsub -V scripts/run_asr_eval_data_tts.pbs
+#   SENTENCES_TXT=data/asr_eval_sentences.txt READINGS_TSV=annotations.tsv qsub -V scripts/run_asr_eval_data_tts.pbs
+
+set -euo pipefail
+
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+SENTENCES_TXT="${SENTENCES_TXT:-data/asr_eval_sentences.txt}"
+READINGS_TSV="${READINGS_TSV:-}"
+OUT_DIR="${OUT_DIR:-out/whisper_streaming_eval/audio}"
+EVAL_JSONL="${EVAL_JSONL:-out/whisper_streaming_eval/sentences.jsonl}"
+TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"
+TTS_SPEAKER="${TTS_SPEAKER:-Ono_Anna}"
+TTS_DEVICE="${TTS_DEVICE:-cuda:0}"
+TTS_DTYPE="${TTS_DTYPE:-float16}"
+CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES
+
+mkdir -p logs experiments/pbs_logs "$(dirname "$EVAL_JSONL")" "$OUT_DIR"
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/ws_eval_tts_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+echo "===== whisper-streaming eval data TTS ====="
+echo "host:          $(hostname)"
+echo "sentences_txt: $SENTENCES_TXT"
+echo "readings_tsv:  ${READINGS_TSV:-none}"
+echo "eval_jsonl:    $EVAL_JSONL"
+echo "out_dir:       $OUT_DIR"
+echo "tts_model:     $TTS_MODEL"
+echo "speaker:       $TTS_SPEAKER"
+echo "dtype:         $TTS_DTYPE"
+echo "started_at:    $(date -Iseconds)"
+echo "==========================================="
+
+command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
+if [[ ! -s "$SENTENCES_TXT" ]]; then
+    echo "ERROR: SENTENCES_TXT is missing or empty: $SENTENCES_TXT" >&2
+    exit 1
+fi
+if [[ -n "$READINGS_TSV" && ! -s "$READINGS_TSV" ]]; then
+    echo "ERROR: READINGS_TSV is missing or empty: $READINGS_TSV" >&2
+    exit 1
+fi
+
+uv sync
+
+prepare_args=(
+    uv run python scripts/prepare_asr_eval_jsonl.py
+    --input "$SENTENCES_TXT"
+    --out "$EVAL_JSONL"
+)
+if [[ -n "$READINGS_TSV" ]]; then
+    prepare_args+=(--readings-tsv "$READINGS_TSV")
+fi
+"${prepare_args[@]}"
+
+uv run python scripts/synthesize_speech.py \
+    --sentences "$EVAL_JSONL" \
+    --out-dir "$OUT_DIR" \
+    --model "$TTS_MODEL" \
+    --speaker "$TTS_SPEAKER" \
+    --device "$TTS_DEVICE" \
+    --dtype "$TTS_DTYPE"
+
+echo "manifest:    $OUT_DIR/manifest.jsonl"
+echo "wav_dir:     $OUT_DIR/wav"
+echo "finished_at: $(date -Iseconds)"

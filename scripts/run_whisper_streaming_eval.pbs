@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N ws_eval_asr
+#PBS -q xvn_s
+#PBS -l select=1:res=small
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -V
+
+# Qwen3-TTSで作成したmanifestをwhisper-streamingで推論し、CER/WER/速度を出す。
+#
+# Submit:
+#   MODEL_DIR=/path/to/ct2-whisper qsub -V scripts/run_whisper_streaming_eval.pbs
+#   CONFIG=configs/whisper_streaming_eval.yaml MODEL_DIR=/path/to/ct2-whisper qsub -V scripts/run_whisper_streaming_eval.pbs
+
+set -euo pipefail
+
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+CONFIG="${CONFIG:-configs/whisper_streaming_eval.yaml}"
+MODEL_DIR="${MODEL_DIR:-}"
+OUT_DIR="${OUT_DIR:-}"
+MANIFEST="${MANIFEST:-}"
+WHISPER_STREAMING_DIR="${WHISPER_STREAMING_DIR:-vendor/whisper_streaming}"
+WHISPER_STREAMING_REF="${WHISPER_STREAMING_REF:-main}"
+CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES
+
+mkdir -p logs experiments/pbs_logs vendor
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/ws_eval_asr_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+echo "===== whisper-streaming ASR eval ====="
+echo "host:        $(hostname)"
+echo "config:      $CONFIG"
+echo "model_dir:   ${MODEL_DIR:-config default}"
+echo "manifest:    ${MANIFEST:-config default}"
+echo "out_dir:     ${OUT_DIR:-config default}"
+echo "repo_dir:    $WHISPER_STREAMING_DIR"
+echo "started_at:  $(date -Iseconds)"
+echo "======================================"
+
+command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
+if [[ ! -s "$CONFIG" ]]; then
+    echo "ERROR: CONFIG is missing: $CONFIG" >&2
+    exit 1
+fi
+
+if [[ ! -d "$WHISPER_STREAMING_DIR/.git" ]]; then
+    git clone https://github.com/ufal/whisper_streaming.git "$WHISPER_STREAMING_DIR"
+fi
+git -C "$WHISPER_STREAMING_DIR" fetch --depth 1 origin "$WHISPER_STREAMING_REF" || true
+git -C "$WHISPER_STREAMING_DIR" checkout "$WHISPER_STREAMING_REF"
+
+uv sync
+
+args=(uv run python scripts/evaluate_whisper_streaming.py --config "$CONFIG")
+if [[ -n "$MODEL_DIR" ]]; then args+=(--model-dir "$MODEL_DIR"); fi
+if [[ -n "$MANIFEST" ]]; then args+=(--manifest "$MANIFEST"); fi
+if [[ -n "$OUT_DIR" ]]; then args+=(--out-dir "$OUT_DIR"); fi
+"${args[@]}"
+
+echo "finished_at: $(date -Iseconds)"

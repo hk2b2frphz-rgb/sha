@@ -1,0 +1,5 @@
+# 1 line = 1 reference sentence for Qwen3-TTS -> whisper-streaming evaluation.
+# Replace this file or pass SENTENCES_TXT=/path/to/examples.txt to the PBS job.
+活性汚泥法は下水処理で広く使われています。
+最終沈殿池の運転状況を確認してください。
+膜分離活性汚泥法による処理性能を評価します。
