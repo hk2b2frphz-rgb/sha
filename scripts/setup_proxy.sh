@@ -122,7 +122,13 @@ echo "[proxy] enabled: ${proxy_display}"
 
 # --- diagnostics -----------------------------------------------------------
 # Set PROXY_DEBUG=0 to silence. Probes are informational and never fail the job.
+# The caller often runs under `set -e`; a probe curl to an unreachable target
+# (e.g. the DIRECT no-proxy test in a proxy-only network) would otherwise abort
+# the whole job. Disable errexit for the probe region and restore it after.
 if [[ "${PROXY_DEBUG:-1}" == "1" ]]; then
+    _proxy_had_errexit=0
+    case $- in *e*) _proxy_had_errexit=1 ;; esac
+    set +e
     masked_url="$(printf '%s' "$proxy_url" | sed -E 's#(://[^:/@]+:)[^@]*@#\1****@#')"
     echo "[proxy] http_proxy=${masked_url}"
     echo "[proxy] no_proxy=${no_proxy:-}"
@@ -196,4 +202,6 @@ PY
     else
         echo "[proxy-check] no python found for connectivity probe"
     fi
+    # Restore errexit if the caller had it enabled.
+    [[ "$_proxy_had_errexit" == "1" ]] && set -e
 fi
