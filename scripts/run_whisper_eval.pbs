@@ -10,10 +10,11 @@
 # Evaluate the FT+CT2 whisper model with whisper-streaming on shared test wavs.
 # res=small = V100 x1. If references are provided, CER/WER are also computed.
 #
-# Submit:
-#   WAV_DIR=data/test_wav qsub -V scripts/run_whisper_eval.pbs
-#   WAV_DIR=data/test_wav REFS=data/test_refs.txt qsub -V scripts/run_whisper_eval.pbs
-#   MODEL_DIR=out/whisper_turbo/ct2 MANIFEST=out/whisper_turbo/test_manifest.jsonl qsub -V scripts/run_whisper_eval.pbs
+# Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
+#   qsub -v WAV_DIR=data/test_wav scripts/run_whisper_eval.pbs
+#   qsub -v "WAV_DIR=data/test_wav,REFS=data/test_refs.txt" scripts/run_whisper_eval.pbs
+#   qsub -v "PROXY_URL=http://user:pass@proxy.example.com:8080,WAV_DIR=data/test_wav" scripts/run_whisper_eval.pbs
+#   qsub -v "MODEL_DIR=out/whisper_turbo/ct2,MANIFEST=out/whisper_turbo/test_manifest.jsonl" scripts/run_whisper_eval.pbs
 
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$(pwd)}"

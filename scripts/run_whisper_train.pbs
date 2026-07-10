@@ -14,11 +14,12 @@
 # already exists, the TTS build step is skipped, so re-runs only re-train with new
 # hyper-parameters. Pass FORCE_REBUILD_DATA=1 to rebuild the audio.
 #
-# Submit:
-#   qsub -V scripts/run_whisper_train.pbs
-#   CSV=data/generated_sentences.csv qsub -V scripts/run_whisper_train.pbs
-#   EPOCHS=8 LORA_R=64 qsub -V scripts/run_whisper_train.pbs
-#   FORCE_REBUILD_DATA=1 qsub -V scripts/run_whisper_train.pbs
+# Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
+#   qsub scripts/run_whisper_train.pbs
+#   qsub -v CSV=data/generated_sentences.csv scripts/run_whisper_train.pbs
+#   qsub -v "EPOCHS=8,LORA_R=64" scripts/run_whisper_train.pbs
+#   qsub -v "PROXY_URL=http://user:pass@proxy.example.com:8080" scripts/run_whisper_train.pbs
+#   qsub -v FORCE_REBUILD_DATA=1 scripts/run_whisper_train.pbs
 
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$(pwd)}"

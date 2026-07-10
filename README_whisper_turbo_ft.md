@@ -18,9 +18,15 @@ whisper-streaming で評価する、ワンパスの手順。
 
 ## 1. 学習 (データ生成 + LoRA FT + CT2変換)
 
+スクリプトには `#PBS -V` があるので、上書き変数は **`qsub -v VAR=値`** で明示的に渡す
+(シェル前置き `VAR=値 qsub` ではなく `-v`。複数はカンマ区切り)。
+
 ```bash
-qsub -V scripts/run_whisper_train.pbs
-# 例: CSV=data/generated_sentences.csv EPOCHS=8 LORA_R=64 qsub -V scripts/run_whisper_train.pbs
+qsub scripts/run_whisper_train.pbs
+# ハイパラ上書き:
+qsub -v "CSV=data/generated_sentences.csv,EPOCHS=8,LORA_R=64" scripts/run_whisper_train.pbs
+# プロキシを渡す場合:
+qsub -v "PROXY_URL=http://user:pass@proxy.example.com:8080" scripts/run_whisper_train.pbs
 ```
 
 1. `prepare_train_from_csv.py`: CSV → `tts_input.jsonl` (`Word`→`Reading` 置換で `tts_text`、
@@ -49,9 +55,11 @@ test wav 群を `data/test_wav/` などに置く。参照テキスト(正解)が
 - キー付きTSV: `key<TAB>text` (`key` は wav ファイル名 or stem)。行にタブがあればこちらと判定。
 
 ```bash
-WAV_DIR=data/test_wav qsub -V scripts/run_whisper_eval.pbs
+qsub -v WAV_DIR=data/test_wav scripts/run_whisper_eval.pbs
 # 参照ありで CER/WER も出す場合 (位置対応ファイル):
-WAV_DIR=data/test_wav REFS=data/test_refs.txt qsub -V scripts/run_whisper_eval.pbs
+qsub -v "WAV_DIR=data/test_wav,REFS=data/test_refs.txt" scripts/run_whisper_eval.pbs
+# プロキシも一緒に:
+qsub -v "PROXY_URL=http://user:pass@proxy.example.com:8080,WAV_DIR=data/test_wav" scripts/run_whisper_eval.pbs
 ```
 
 `build_test_manifest.py` が `test_manifest.jsonl` を作り、
