@@ -1,0 +1,4 @@
+# whisper-large-v3-turbo のベースモデルパス。
+# 先頭の非コメント行が使われる。HPC上ではローカル重みのパスに書き換える。
+# 例: /home/youruser/models/whisper-large-v3-turbo
+openai/whisper-large-v3-turbo

@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N ws_turbo_train
+#PBS -q xvn_s
+#PBS -l select=1:res=middle2
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -V
+
+# generated_sentences.csv -> Qwen3-TTS(4GPU並列) -> whisper-large-v3-turbo LoRA FT
+# -> LoRAマージ -> CT2 Whisper変換。res=middle2 = V100×4。
+#
+# 学習データ(TTS音声+manifest)は一度作れば再利用する。TRAIN_MANIFEST が既に
+# 存在すれば TTS生成をスキップする (再学習時はハイパラだけ変えて再投入できる)。
+# 作り直したいときは FORCE_REBUILD_DATA=1 を渡す。
+#
+# Submit:
+#   qsub -V scripts/run_whisper_train.pbs
+#   CSV=data/generated_sentences.csv qsub -V scripts/run_whisper_train.pbs
+#   EPOCHS=8 LORA_R=64 qsub -V scripts/run_whisper_train.pbs
+#   FORCE_REBUILD_DATA=1 qsub -V scripts/run_whisper_train.pbs
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+CSV="${CSV:-data/generated_sentences.csv}"
+BASE_MODEL_FILE="${BASE_MODEL_FILE:-manifest.txt}"
+WORK_ROOT="${WORK_ROOT:-out/whisper_turbo}"
+TTS_INPUT="${TTS_INPUT:-$WORK_ROOT/tts_input.jsonl}"
+DATA_ROOT="${DATA_ROOT:-$WORK_ROOT/tts_data}"
+TRAIN_MANIFEST="${TRAIN_MANIFEST:-$WORK_ROOT/train_manifest.jsonl}"
+ADAPTER_ROOT="${ADAPTER_ROOT:-$WORK_ROOT/lora}"
+MERGED_DIR="${MERGED_DIR:-$WORK_ROOT/merged_hf}"
+CT2_DIR="${CT2_DIR:-$WORK_ROOT/ct2}"
+
+NUM_SHARDS="${NUM_SHARDS:-4}"
+CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
+export CUDA_VISIBLE_DEVICES
+
+TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"
+TTS_SPEAKER="${TTS_SPEAKER:-Ono_Anna}"
+TTS_DTYPE="${TTS_DTYPE:-float16}"
+
+EPOCHS="${EPOCHS:-5}"
+LR="${LR:-1e-4}"
+BATCH_SIZE="${BATCH_SIZE:-8}"
+GRAD_ACCUM="${GRAD_ACCUM:-1}"
+LORA_R="${LORA_R:-32}"
+LORA_ALPHA="${LORA_ALPHA:-64}"
+LANGUAGE="${LANGUAGE:-ja}"
+CT2_QUANT="${CT2_QUANT:-float16}"
+FORCE_REBUILD_DATA="${FORCE_REBUILD_DATA:-0}"
+
+mkdir -p logs experiments/pbs_logs "$WORK_ROOT" "$DATA_ROOT"
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/ws_turbo_train_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+IFS=',' read -r -a GPU_IDS <<< "$CUDA_VISIBLE_DEVICES"
+
+echo "===== whisper-large-v3-turbo LoRA train ====="
+echo "host:            $(hostname)"
+echo "csv:             $CSV"
+echo "base_model_file: $BASE_MODEL_FILE"
+echo "train_manifest:  $TRAIN_MANIFEST"
+echo "adapter_root:    $ADAPTER_ROOT"
+echo "merged_dir:      $MERGED_DIR"
+echo "ct2_dir:         $CT2_DIR"
+echo "gpus:            $CUDA_VISIBLE_DEVICES  (num_shards=$NUM_SHARDS)"
+echo "epochs=$EPOCHS lr=$LR bs=$BATCH_SIZE grad_accum=$GRAD_ACCUM lora_r=$LORA_R"
+echo "started_at:      $(date -Iseconds)"
+echo "============================================="
+
+command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
+if [[ "${#GPU_IDS[@]}" -lt "$NUM_SHARDS" ]]; then
+    echo "ERROR: GPUが ${#GPU_IDS[@]} 枚しか無いのに NUM_SHARDS=$NUM_SHARDS" >&2
+    exit 1
+fi
+if [[ ! -s "$CSV" ]]; then
+    echo "ERROR: CSV が無い/空: $CSV" >&2
+    exit 1
+fi
+
+uv sync
+
+# ---- step 1/4: 学習データ(TTS)生成。既存なら再利用 --------------------------
+if [[ -s "$TRAIN_MANIFEST" && "$FORCE_REBUILD_DATA" != "1" ]]; then
+    echo "===== step 1/4: TTS学習データは既存 -> 再利用 ($TRAIN_MANIFEST) ====="
+else
+    echo "===== step 1/4: TTS学習データを生成 (4GPU並列) ====="
+    uv run python scripts/prepare_train_from_csv.py --input "$CSV" --out "$TTS_INPUT"
+
+    # tts_input を NUM_SHARDS 個に分割
+    uv run python - "$TTS_INPUT" "$DATA_ROOT" "$NUM_SHARDS" <<'PY'
+import sys
+from pathlib import Path
+src = Path(sys.argv[1]); root = Path(sys.argv[2]); n = int(sys.argv[3])
+rows = [l for l in src.read_text(encoding="utf-8").splitlines() if l.strip()]
+for i in range(n):
+    d = root / f"shard_{i:02d}"; d.mkdir(parents=True, exist_ok=True)
+    part = [r for j, r in enumerate(rows) if j % n == i]
+    (d / "sentences.jsonl").write_text("\n".join(part) + ("\n" if part else ""), encoding="utf-8")
+    print(f"shard_{i:02d}: {len(part)} rows")
+PY
+
+    pids=()
+    for ((i = 0; i < NUM_SHARDS; i++)); do
+        shard_tag="$(printf 'shard_%02d' "$i")"
+        shard_dir="$DATA_ROOT/$shard_tag"
+        gpu_id="${GPU_IDS[$i]}"
+        shard_log="$DATA_ROOT/${shard_tag}.log"
+        (
+            set -euo pipefail
+            CUDA_VISIBLE_DEVICES="$gpu_id" uv run python scripts/synthesize_speech.py \
+                --sentences "$shard_dir/sentences.jsonl" \
+                --out-dir "$shard_dir" \
+                --model "$TTS_MODEL" \
+                --speaker "$TTS_SPEAKER" \
+                --device "cuda:0" \
+                --dtype "$TTS_DTYPE"
+            test -s "$shard_dir/manifest.jsonl"
+        ) > "$shard_log" 2>&1 &
+        pids+=("$!")
+        echo "started $shard_tag on gpu $gpu_id (log=$shard_log)"
+    done
+    failed=0
+    for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+    if [[ "$failed" != "0" ]]; then
+        echo "ERROR: TTSシャードが失敗。$DATA_ROOT/shard_*.log を確認" >&2
+        exit 1
+    fi
+
+    synth_args=()
+    for ((i = 0; i < NUM_SHARDS; i++)); do
+        synth_args+=(--synth-dir "$DATA_ROOT/$(printf 'shard_%02d' "$i")")
+    done
+    uv run python scripts/build_whisper_manifest.py \
+        --tts-input "$TTS_INPUT" \
+        "${synth_args[@]}" \
+        --out "$TRAIN_MANIFEST"
+fi
+test -s "$TRAIN_MANIFEST"
+echo "train rows: $(grep -c . "$TRAIN_MANIFEST")"
+
+# ---- step 2/4: LoRA fine-tune (DDP) ----------------------------------------
+echo "===== step 2/4: LoRA fine-tune (${NUM_SHARDS} GPU DDP) ====="
+uv run accelerate launch --num_processes "$NUM_SHARDS" --mixed_precision fp16 \
+    scripts/train_whisper_lora.py \
+    --manifest "$TRAIN_MANIFEST" \
+    --base-model-file "$BASE_MODEL_FILE" \
+    --out-dir "$ADAPTER_ROOT" \
+    --merge-dir "$MERGED_DIR" \
+    --language "$LANGUAGE" \
+    --epochs "$EPOCHS" \
+    --lr "$LR" \
+    --batch-size "$BATCH_SIZE" \
+    --grad-accum "$GRAD_ACCUM" \
+    --lora-r "$LORA_R" \
+    --lora-alpha "$LORA_ALPHA"
+test -d "$MERGED_DIR"
+
+# ---- step 3/4: CT2 変換 -----------------------------------------------------
+echo "===== step 3/4: CTranslate2 変換 ====="
+rm -rf "$CT2_DIR"
+uv run ct2-transformers-converter \
+    --model "$MERGED_DIR" \
+    --output_dir "$CT2_DIR" \
+    --quantization "$CT2_QUANT" \
+    --copy_files tokenizer.json preprocessor_config.json
+test -s "$CT2_DIR/model.bin"
+
+# ---- step 4/4: 完了 ---------------------------------------------------------
+echo "===== step 4/4: 完了 ====="
+echo "ct2_model_dir: $CT2_DIR"
+echo "評価は:  MODEL_DIR=$CT2_DIR MANIFEST=<test_manifest.jsonl> qsub -V scripts/run_whisper_eval.pbs"
+echo "finished_at:   $(date -Iseconds)"
