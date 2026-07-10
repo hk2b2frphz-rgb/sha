@@ -7,6 +7,11 @@ CSV列: Number, Word, Reading, Sentance, AI_Reading, Confirmed_Reading
 (専門用語だけをひらがな読みにした発話)、学習ターゲットには元の Sentance
 (漢字のまま) を残す。後段の build_whisper_manifest.py が id で join する。
 
+Word が Sentance 内に見つからず置換できない行では、Confirmed_Reading
+(文全体をひらがな化した読み) があればそれを tts_text に使う。学習ターゲット
+(sentence) は常に元の漢字文のまま。Confirmed_Reading も空の行だけ未解決として
+term_mismatch.tsv に記録する。
+
 出力JSONL 1行:
   {"id", "term", "reading", "sentence", "tts_text"}
     sentence : 元の Sentance (漢字) = ASR学習の正解テキスト
@@ -27,6 +32,14 @@ COLUMN_ALIASES = {
     "word": ("Word", "word", "term", "Term"),
     "reading": ("Reading", "reading", "yomi", "Yomi"),
     "sentence": ("Sentance", "Sentence", "sentence", "sentance"),
+    # 文全体をひらがな化した読み。用語がSentance内に見つからない行のTTSに使う。
+    "confirmed_reading": (
+        "Confirmed_Reading",
+        "confirmed_reading",
+        "ConfirmedReading",
+        "Confirmed",
+        "Conferemed_Reading",
+    ),
 }
 
 
@@ -54,6 +67,13 @@ def resolve_column(fieldnames: list[str], key: str) -> str:
     )
 
 
+def resolve_optional_column(fieldnames: list[str], key: str) -> str | None:
+    for candidate in COLUMN_ALIASES[key]:
+        if candidate in fieldnames:
+            return candidate
+    return None
+
+
 def main() -> None:
     args = parse_args()
     # utf-8-sig: Excel由来のBOM付きCSVでも先頭列名が壊れないように。
@@ -66,18 +86,26 @@ def main() -> None:
         col_word = resolve_column(fields, "word")
         col_reading = resolve_column(fields, "reading")
         col_sentence = resolve_column(fields, "sentence")
+        col_confirmed = resolve_optional_column(fields, "confirmed_reading")
         rows = list(reader)
+    if col_confirmed is None:
+        print(
+            "[INFO] Confirmed_Reading 列が無いため、用語不一致時のフォールバックは無効です",
+            file=sys.stderr,
+        )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     skipped = 0
     missing_term = 0
+    used_confirmed = 0
     mismatches: list[tuple[str, str, str, str]] = []  # (id, term, reading, sentence)
     with args.out.open("w", encoding="utf-8") as out_fh:
         for i, row in enumerate(rows, 1):
             sentence = (row.get(col_sentence) or "").strip()
             term = (row.get(col_word) or "").strip()
             reading = (row.get(col_reading) or "").strip()
+            confirmed = (row.get(col_confirmed) or "").strip() if col_confirmed else ""
             if not sentence:
                 skipped += 1
                 continue
@@ -100,14 +128,24 @@ def main() -> None:
                             f"(元データに全角/半角等の表記ゆれ)",
                             file=sys.stderr,
                         )
+                    elif confirmed:
+                        # 用語の表層置換が無理でも、文全体のひらがな読み
+                        # (Confirmed_Reading) を使えば正しい読みでTTSできる。
+                        used_confirmed += 1
+                        tts_text = confirmed
+                        print(
+                            f"[INFO] {rec_id}: Word が発話文に無いため "
+                            f"Confirmed_Reading(文全体のひらがな)をTTSに使用",
+                            file=sys.stderr,
+                        )
                     else:
-                        # 置換されない = TTSが漢字を誤読する恐れ。実タイポ判別のため文も出す。
+                        # Confirmed_Reading も無い = 手当てできない。実タイポ判別のため文も出す。
                         missing_term += 1
                         mismatches.append((rec_id, term, reading, sentence))
                         snippet = sentence if len(sentence) <= 50 else sentence[:50] + "..."
                         print(
-                            f"[WARN] {rec_id}: Word '{term}' が発話文に見つからず置換されません "
-                            f'| 発話文="{snippet}"',
+                            f"[WARN] {rec_id}: Word '{term}' が発話文に見つからず、"
+                            f'Confirmed_Reading も空です | 発話文="{snippet}"',
                             file=sys.stderr,
                         )
                         tts_text = sentence
@@ -142,7 +180,8 @@ def main() -> None:
 
     print(
         f"wrote {written} records -> {args.out} "
-        f"(skipped_empty={skipped}, term_not_found={missing_term})"
+        f"(skipped_empty={skipped}, used_confirmed_reading={used_confirmed}, "
+        f"unresolved={missing_term})"
     )
     # 末尾サマリ: ログにも一覧を残す。cat する時のパスも明示。
     print("===== TERM MISMATCH SUMMARY =====")
