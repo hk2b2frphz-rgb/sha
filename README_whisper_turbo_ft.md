@@ -1,14 +1,15 @@
 # whisper-large-v3-turbo FT パイプライン (generated_sentences.csv 起点)
 
-`generated_sentences.csv` の専門用語だけをひらがな読みにした発話を Qwen3-TTS で合成し、
+`generated_sentences.csv` の専門用語だけをひらがな読みにした発話を TTS で合成し、
 その音声を使って whisper-large-v3-turbo を LoRA fine-tune、CT2 へ変換して
 whisper-streaming で評価する、ワンパスの手順。
 
 - **学習ターゲット**: 元の `Sentance`(漢字のまま)。TTSはひらがな読みで発話し、whisperには
   「正しい読みの音声 → 漢字表記」を学習させる。
-- **FT方式**: LoRA/PEFT (V100 16GB に安全に載る)。学習後 base にマージ→CT2変換。
+- **TTS**: 既定は **Kokoro-82M**(高速)。`TTS_BACKEND=qwen3` で Qwen3-TTS に切替可。
+- **FT方式**: LoRA/PEFT。学習後 base にマージ→CT2変換。
 - **eval対象**: 共有された test wav 群のみ。参照テキストがあれば CER/WER も算出。
-- **リソース**: 学習=`res=middle2`(V100×4)、評価=`res=small`(V100×1)。
+- **既定リソース**: 学習=`xan_s` / `res=middle`(**A100×2**)、評価=`res=small`。
 
 ## 0. 事前準備
 
@@ -16,37 +17,38 @@ whisper-streaming で評価する、ワンパスの手順。
 - `manifest.txt` の先頭非コメント行を、HPC上の whisper-large-v3-turbo 重みパスに書き換える
   (既定は `openai/whisper-large-v3-turbo`)。
 
-## ネットワーク遮断ノード (res=middle2) 向け: オフライン実行
+## ノード / TTSバックエンド
 
-4GPUノード(`res=middle2`)は**外部ネット非接続**のことが多い。その場合、ネットに出られる
-ノード(ログイン or `res=small`)で先にキャッシュを用意してから、学習を `OFFLINE=1` で回す。
-共有ファイルシステム(リポジトリ配下 + `~/.cache/huggingface`)経由でmiddle2が読む。
+既定は **A100×2 (`xan_s` / `res=middle`) + Kokoro-TTS**。`run_whisper_train.pbs` に
+`#PBS -q xan_s` / `#PBS -l select=1:res=middle` が入っているので、そのまま投げるとA100で動く。
 
 ```bash
-# 1) ネット可能ノード(ログイン等)で事前DL: .venv + HFキャッシュ(Qwen3-TTS/whisper) + vendor
+# 既定 (A100×2, Kokoro, オンライン)
+qsub -v "PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+
+# Qwen3-TTS に切替
+qsub -v "TTS_BACKEND=qwen3,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+```
+
+Kokoro は依存が本体と衝突する(misaki[ja]がfull unidicを要求 vs 本体のunidic-lite)ため、
+**隔離env** (`uv run --isolated --with kokoro ... --with 'misaki[ja]'`) で動かす。ジョブが
+自動でその env を作り `python -m unidic download` する(初回は少し時間がかかる)。
+
+**V100×4 (`res=middle2`) で回す場合はネット遮断なのでオフライン実行**:
+
+```bash
+# 1) ネット可能ノードで事前DL (.venv + HFキャッシュ + Kokoro隔離env + vendor)
 PROXY_URL=http://user:pass%40@host:port bash scripts/prestage_offline.sh
-
-# 2) 学習はGPUノードでオフライン実行
-qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
+# 2) V100×4でオフライン実行
+qsub -q xvn_s -l select=1:res=middle2 -v "OFFLINE=1,NUM_SHARDS=4" scripts/run_whisper_train.pbs
 ```
 
-**別案: `res=middle`(2GPU, ネット接続可) でオンライン実行** — prestage不要。GPU枚数は
-`NUM_SHARDS` から自動導出するので `CUDA_VISIBLE_DEVICES` を渡す必要はない。
-
-```bash
-qsub -l select=1:res=middle -v "NUM_SHARDS=2,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
-```
-
-**TTSを速くしたい: A100 (`xan_s`キュー)** — A100はbf16ネイティブで速い。TF32も自動有効。
-
-```bash
-qsub -q xan_s -l select=1:res=middle -v "NUM_SHARDS=2,TTS_DTYPE=bfloat16,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
-```
+GPU枚数は `NUM_SHARDS` から自動導出(既定2)。`CUDA_VISIBLE_DEVICES` を渡す必要はない。
 
 **進捗表示**: メインのジョブログに `[tts-progress] 済/総 (％) elapsed=...` を
 `PROGRESS_EVERY`秒(既定30)ごとに出力。1文ごとの詳細(ETA付き)は
-`out/whisper_turbo/tts_data/shard_*.log` に出る。TTSは自己回帰生成なので単体の
-高速化は限定的で、実質の短縮は「GPUを増やす(NUM_SHARDS)」「A100を使う」が効く。
+`out/whisper_turbo/tts_data/shard_*.log`。TTSは自己回帰生成なので単体高速化は限定的で、
+実質は「Kokoro(既定)」「A100」「GPUを増やす(NUM_SHARDS)」が効く。
 
 `OFFLINE=1` で `UV_OFFLINE`/`HF_HUB_OFFLINE`/`TRANSFORMERS_OFFLINE` を立て、`uv sync` は
 キャッシュのみ、モデルDLもキャッシュから読む。ノードがネットに繋がる場合は不要。

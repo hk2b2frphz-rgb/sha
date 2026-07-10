@@ -1,32 +1,30 @@
 #!/usr/bin/env bash
 #PBS -S /bin/bash
 #PBS -N ws_turbo_train
-#PBS -q xvn_s
-#PBS -l select=1:res=middle2
+#PBS -q xan_s
+#PBS -l select=1:res=middle
 #PBS -l walltime=24:00:00
 #PBS -j oe
 #PBS -V
 
-# generated_sentences.csv -> Qwen3-TTS (4-GPU parallel) -> whisper-large-v3-turbo
-# LoRA fine-tune -> merge LoRA -> CTranslate2 convert. res=middle2 = V100 x4.
+# generated_sentences.csv -> TTS (multi-GPU parallel) -> whisper-large-v3-turbo
+# LoRA fine-tune -> merge LoRA -> CTranslate2 convert.
+# DEFAULT node: queue xan_s, res=middle = A100 x2. TTS backend defaults to Kokoro
+# (fast); pass TTS_BACKEND=qwen3 for Qwen3-TTS instead.
 #
 # Training data (TTS audio + manifest) is built once and reused. If TRAIN_MANIFEST
 # already exists, the TTS build step is skipped, so re-runs only re-train with new
 # hyper-parameters. Pass FORCE_REBUILD_DATA=1 to rebuild the audio.
 #
-# NETWORK / node choice:
-#   res=middle2 (4-GPU) has NO internet -> prestage first, then run with OFFLINE=1.
-#   res=middle  (2-GPU) HAS internet    -> run online with NUM_SHARDS=2 (no prestage).
 # NUM_SHARDS sets both GPU count and DDP processes; GPUs are auto-derived from it.
 #
 # Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
-#   # 2-GPU online on res=middle (has network):
-#   qsub -l select=1:res=middle -v "NUM_SHARDS=2,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
-#   # A100 (faster TTS): queue xan_s. bf16 is native on A100.
-#   qsub -q xan_s -l select=1:res=middle -v "NUM_SHARDS=2,TTS_DTYPE=bfloat16,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
-#   # 4-GPU offline on res=middle2 (after scripts/prestage_offline.sh):
-#   qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
-#   qsub -v "OFFLINE=1,EPOCHS=8,LORA_R=64" scripts/run_whisper_train.pbs
+#   # default: A100 x2 (xan_s/res=middle), Kokoro TTS, online:
+#   qsub -v "PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+#   # Qwen3-TTS instead of Kokoro:
+#   qsub -v "TTS_BACKEND=qwen3,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+#   # V100 x4 offline on res=middle2 (after scripts/prestage_offline.sh):
+#   qsub -q xvn_s -l select=1:res=middle2 -v "OFFLINE=1,NUM_SHARDS=4" scripts/run_whisper_train.pbs
 #
 # TTS progress is printed to this log as [tts-progress] every PROGRESS_EVERY sec
 # (default 30). Per-utterance detail with ETA is in out/.../tts_data/shard_*.log.
@@ -59,12 +57,12 @@ MERGED_DIR="${MERGED_DIR:-$WORK_ROOT/merged_hf}"
 CT2_DIR="${CT2_DIR:-$WORK_ROOT/ct2}"
 
 # NUM_SHARDS = number of GPUs used for parallel TTS and for DDP training.
-#   res=middle2 -> 4 (default), res=middle -> pass NUM_SHARDS=2.
+#   default 2 (xan_s/res=middle = A100 x2); pass NUM_SHARDS=4 for res=middle2.
 # Derive CUDA_VISIBLE_DEVICES from NUM_SHARDS so callers never need to pass a
 # comma-separated list via `qsub -v` (the comma would split into bogus vars).
 # `#PBS -V` can also inherit a stale single-GPU value; deriving here avoids that.
 # To pin specific GPUs, pass GPU_LIST=0,2 instead.
-NUM_SHARDS="${NUM_SHARDS:-4}"
+NUM_SHARDS="${NUM_SHARDS:-2}"
 if [[ -n "${GPU_LIST:-}" ]]; then
     CUDA_VISIBLE_DEVICES="$GPU_LIST"
 else
@@ -72,9 +70,14 @@ else
 fi
 export CUDA_VISIBLE_DEVICES
 
+# TTS backend: kokoro (fast, default) | qwen3
+TTS_BACKEND="${TTS_BACKEND:-kokoro}"
 TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"
 TTS_SPEAKER="${TTS_SPEAKER:-Ono_Anna}"
-TTS_DTYPE="${TTS_DTYPE:-float16}"
+TTS_DTYPE="${TTS_DTYPE:-bfloat16}"
+# Kokoro Japanese preset voice (jf_alpha/jf_gongitsune/jf_tebukuro women, jm_kumo man)
+KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
+KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
 
 EPOCHS="${EPOCHS:-5}"
 LR="${LR:-1e-4}"
@@ -103,6 +106,11 @@ echo "adapter_root:    $ADAPTER_ROOT"
 echo "merged_dir:      $MERGED_DIR"
 echo "ct2_dir:         $CT2_DIR"
 echo "gpus:            $CUDA_VISIBLE_DEVICES  (num_shards=$NUM_SHARDS)"
+if [[ "$TTS_BACKEND" == "kokoro" ]]; then
+    echo "tts_backend:     kokoro (voice=$KOKORO_VOICE, model=$KOKORO_MODEL)"
+else
+    echo "tts_backend:     qwen3 (speaker=$TTS_SPEAKER, dtype=$TTS_DTYPE)"
+fi
 echo "epochs=$EPOCHS lr=$LR bs=$BATCH_SIZE grad_accum=$GRAD_ACCUM lora_r=$LORA_R"
 echo "started_at:      $(date -Iseconds)"
 echo "============================================="
@@ -141,9 +149,31 @@ fi
 if [[ -s "$TRAIN_MANIFEST" && "$FORCE_REBUILD_DATA" != "1" ]]; then
     echo "===== step 1/4: reusing existing TTS training data ($TRAIN_MANIFEST) ====="
 else
-    echo "===== step 1/4: building TTS training data (4-GPU parallel) ====="
+    echo "===== step 1/4: building TTS training data ($TTS_BACKEND, ${NUM_SHARDS}-GPU parallel) ====="
     uv run python scripts/prepare_train_from_csv.py --input "$CSV" --out "$TTS_INPUT"
     echo "term mismatch report: $(dirname "$TTS_INPUT")/term_mismatch.tsv  (cat to inspect)"
+
+    # Kokoro conflicts with the project deps (misaki[ja] wants full unidic vs our
+    # unidic-lite), so it runs in an isolated uv env. Build the KOKORO_UV launcher
+    # from the project's torch version and fetch the unidic dictionary once.
+    if [[ "$TTS_BACKEND" == "kokoro" ]]; then
+        TORCH_VERSION="$(uv run python -c 'import torch; print(torch.__version__)')"
+        TORCHAUDIO_VERSION="$(uv run python -c 'import torchaudio; print(torchaudio.__version__)')"
+        KOKORO_UV=(
+            uv run --isolated --no-project
+            --index "pytorch-cu121=https://download.pytorch.org/whl/cu121"
+            --with "kokoro>=0.9.4"
+            --with "misaki[ja]"
+            --with unidic
+            --with pyopenjtalk
+            --with soundfile
+            --with numpy
+            --with "torch==$TORCH_VERSION"
+            --with "torchaudio==$TORCHAUDIO_VERSION"
+        )
+        echo "[kokoro] downloading unidic dictionary..."
+        "${KOKORO_UV[@]}" python -m unidic download
+    fi
 
     # split tts_input into NUM_SHARDS parts
     uv run python - "$TTS_INPUT" "$DATA_ROOT" "$NUM_SHARDS" <<'PY'
@@ -166,13 +196,23 @@ PY
         shard_log="$DATA_ROOT/${shard_tag}.log"
         (
             set -euo pipefail
-            CUDA_VISIBLE_DEVICES="$gpu_id" uv run python scripts/synthesize_speech.py \
-                --sentences "$shard_dir/sentences.jsonl" \
-                --out-dir "$shard_dir" \
-                --model "$TTS_MODEL" \
-                --speaker "$TTS_SPEAKER" \
-                --device "cuda:0" \
-                --dtype "$TTS_DTYPE"
+            if [[ "$TTS_BACKEND" == "kokoro" ]]; then
+                CUDA_VISIBLE_DEVICES="$gpu_id" "${KOKORO_UV[@]}" \
+                    python scripts/synthesize_speech_kokoro.py \
+                    --sentences "$shard_dir/sentences.jsonl" \
+                    --out-dir "$shard_dir" \
+                    --model-id "$KOKORO_MODEL" \
+                    --voice "$KOKORO_VOICE" \
+                    --device "cuda"
+            else
+                CUDA_VISIBLE_DEVICES="$gpu_id" uv run python scripts/synthesize_speech.py \
+                    --sentences "$shard_dir/sentences.jsonl" \
+                    --out-dir "$shard_dir" \
+                    --model "$TTS_MODEL" \
+                    --speaker "$TTS_SPEAKER" \
+                    --device "cuda:0" \
+                    --dtype "$TTS_DTYPE"
+            fi
             test -s "$shard_dir/manifest.jsonl"
         ) > "$shard_log" 2>&1 &
         pids+=("$!")

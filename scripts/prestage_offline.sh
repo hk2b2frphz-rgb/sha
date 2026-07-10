@@ -66,6 +66,31 @@ warm(os.environ.get("TTS_MODEL"))
 print("[prestage] HF cache dir:", os.environ.get("HF_HOME") or "~/.cache/huggingface (default)")
 PY
 
+# Kokoro runs in an isolated uv env (deps conflict with the project). Build that
+# env from cache-able wheels and fetch its unidic dictionary + the Kokoro model,
+# so an OFFLINE training run can reuse them. Skip with PRESTAGE_KOKORO=0.
+if [[ "${PRESTAGE_KOKORO:-1}" == "1" ]]; then
+    echo "===== prestage 3b/3: Kokoro isolated env ====="
+    TORCH_VERSION="$(uv run python -c 'import torch; print(torch.__version__)')"
+    TORCHAUDIO_VERSION="$(uv run python -c 'import torchaudio; print(torchaudio.__version__)')"
+    KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
+    KOKORO_UV=(
+        uv run --isolated --no-project
+        --index "pytorch-cu121=https://download.pytorch.org/whl/cu121"
+        --with "kokoro>=0.9.4"
+        --with "misaki[ja]"
+        --with unidic
+        --with pyopenjtalk
+        --with soundfile
+        --with numpy
+        --with "torch==$TORCH_VERSION"
+        --with "torchaudio==$TORCHAUDIO_VERSION"
+    )
+    "${KOKORO_UV[@]}" python -m unidic download
+    KOKORO_MODEL="$KOKORO_MODEL" "${KOKORO_UV[@]}" python -c \
+        "import os; from huggingface_hub import snapshot_download; print('[prestage] cached', snapshot_download(os.environ['KOKORO_MODEL']))"
+fi
+
 echo "===== prestage done ====="
 echo "Next, on the GPU node (no network):"
 echo "  qsub -v OFFLINE=1 scripts/run_whisper_train.pbs"
