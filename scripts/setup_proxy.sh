@@ -130,9 +130,38 @@ if [[ "${PROXY_DEBUG:-1}" == "1" ]]; then
     elif [[ -n "${PROXY_HOST:-}" ]]; then proxy_src="PROXY_HOST"
     else proxy_src="inherited_env"; fi
     echo "[proxy] source=${proxy_src}"
-    if [[ -n "$proxy_python" ]]; then
+    echo "[proxy-check] node hostname: $(hostname)"
+
+    proxy_targets="${PROXY_TARGETS:-https://huggingface.co https://pypi.org https://download.pytorch.org}"
+    proxy_host_only="$(printf '%s' "$proxy_display")"
+
+    # DNS resolution of the proxy host.
+    if command -v getent >/dev/null 2>&1; then
+        if getent hosts "${proxy_host_only%%:*}" >/dev/null 2>&1; then
+            echo "[proxy-check] DNS resolve ${proxy_host_only%%:*}: OK ($(getent hosts "${proxy_host_only%%:*}" | awk '{print $1}' | tr '\n' ' '))"
+        else
+            echo "[proxy-check] DNS resolve ${proxy_host_only%%:*}: FAILED (name not resolvable from this node)"
+        fi
+    fi
+
+    # curl gives the clearest failure signal (exit code + HTTP status).
+    #   exit 5 = cannot resolve proxy | 7 = cannot connect to proxy (port/firewall)
+    #   exit 28 = timeout (often: this node has no route out) | http_code 407 = auth
+    if command -v curl >/dev/null 2>&1; then
+        for tgt in $proxy_targets; do
+            out=$(curl -sS -x "$proxy_url" -o /dev/null \
+                  -w 'http_code=%{http_code} time=%{time_total}s' \
+                  --max-time 15 "$tgt" 2>&1) ; rc=$?
+            echo "[proxy-check] curl via proxy $tgt -> ${out} curl_exit=${rc}"
+        done
+        # Direct (no proxy) egress test: does this node reach the internet at all?
+        direct=$(curl -sS --noproxy '*' -o /dev/null \
+                 -w 'http_code=%{http_code} time=%{time_total}s' \
+                 --max-time 10 https://huggingface.co 2>&1) ; drc=$?
+        echo "[proxy-check] curl DIRECT (no proxy) huggingface.co -> ${direct} curl_exit=${drc}"
+    elif [[ -n "$proxy_python" ]]; then
         PROXY_CHECK_URL="$proxy_url" \
-        PROXY_TARGETS="${PROXY_TARGETS:-https://huggingface.co https://pypi.org https://download.pytorch.org}" \
+        PROXY_TARGETS="$proxy_targets" \
         "$proxy_python" - <<'PY' || true
 import os, socket, time
 from urllib.parse import urlsplit

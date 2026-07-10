@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N ws_net_check
+#PBS -q xvn_s
+#PBS -l select=1:res=small
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -V
+
+# Network / proxy reachability check ONLY. No training, no downloads beyond a
+# few small HEAD requests. Submit this to a compute node to see, in the job log,
+# whether this node can reach the proxy and the internet.
+#
+# Submit:
+#   qsub -v "PROXY_URL=http://user:pass%40@proxy.example.com:8080" scripts/run_net_check.pbs
+#
+# Read the result in: experiments/pbs_logs/ws_net_check_<JOBID>.log
+# Look at the [proxy-check] lines:
+#   curl_exit=5  -> cannot resolve proxy host (DNS/name)
+#   curl_exit=7  -> cannot connect to proxy (wrong port / firewall)
+#   curl_exit=28 -> timeout (this compute node likely has no route out)
+#   http_code=407 -> proxy auth failed (user/pass / %40 encoding)
+#   http_code=200 -> proxy path works (problem is elsewhere)
+#   DIRECT huggingface.co http_code=200 -> node has internet without proxy
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+mkdir -p experiments/pbs_logs
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/ws_net_check_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+echo "===== network / proxy check ====="
+echo "host:       $(hostname)"
+echo "started_at: $(date -Iseconds)"
+echo "================================="
+
+# setup_proxy.sh prints all [proxy] / [proxy-check] diagnostics (DNS + curl).
+export PROXY_DEBUG=1
+if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$PWD/scripts/setup_proxy.sh" || true
+else
+    echo "ERROR: scripts/setup_proxy.sh not found" >&2
+    exit 1
+fi
+
+echo "===== extra checks ====="
+echo "which curl: $(command -v curl || echo none)"
+echo "which uv:   $(command -v uv || echo none)"
+echo "env http_proxy=${http_proxy:-unset}"
+echo "env https_proxy=${https_proxy:-unset}"
+echo "env no_proxy=${no_proxy:-unset}"
+echo "finished_at: $(date -Iseconds)"
