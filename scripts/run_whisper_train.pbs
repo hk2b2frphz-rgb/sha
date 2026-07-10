@@ -14,16 +14,17 @@
 # already exists, the TTS build step is skipped, so re-runs only re-train with new
 # hyper-parameters. Pass FORCE_REBUILD_DATA=1 to rebuild the audio.
 #
-# NETWORK: res=middle2 (4-GPU) nodes usually have NO internet. First run
-#   scripts/prestage_offline.sh on a networked node (login/small) to fill the
-#   .venv and HF cache, then submit this job with OFFLINE=1 (uses cache only).
+# NETWORK / node choice:
+#   res=middle2 (4-GPU) has NO internet -> prestage first, then run with OFFLINE=1.
+#   res=middle  (2-GPU) HAS internet    -> run online with NUM_SHARDS=2 (no prestage).
+# NUM_SHARDS sets both GPU count and DDP processes; GPUs are auto-derived from it.
 #
 # Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
-#   qsub -v OFFLINE=1 scripts/run_whisper_train.pbs          # after prestage (typical)
+#   # 2-GPU online on res=middle (has network):
+#   qsub -l select=1:res=middle -v "NUM_SHARDS=2,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+#   # 4-GPU offline on res=middle2 (after scripts/prestage_offline.sh):
+#   qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
 #   qsub -v "OFFLINE=1,EPOCHS=8,LORA_R=64" scripts/run_whisper_train.pbs
-#   qsub -v FORCE_REBUILD_DATA=1 scripts/run_whisper_train.pbs
-#   # networked node only:
-#   qsub -v "PROXY_URL=http://user:pass@proxy.example.com:8080" scripts/run_whisper_train.pbs
 
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$(pwd)}"
@@ -52,8 +53,18 @@ ADAPTER_ROOT="${ADAPTER_ROOT:-$WORK_ROOT/lora}"
 MERGED_DIR="${MERGED_DIR:-$WORK_ROOT/merged_hf}"
 CT2_DIR="${CT2_DIR:-$WORK_ROOT/ct2}"
 
+# NUM_SHARDS = number of GPUs used for parallel TTS and for DDP training.
+#   res=middle2 -> 4 (default), res=middle -> pass NUM_SHARDS=2.
+# Derive CUDA_VISIBLE_DEVICES from NUM_SHARDS so callers never need to pass a
+# comma-separated list via `qsub -v` (the comma would split into bogus vars).
+# `#PBS -V` can also inherit a stale single-GPU value; deriving here avoids that.
+# To pin specific GPUs, pass GPU_LIST=0,2 instead.
 NUM_SHARDS="${NUM_SHARDS:-4}"
-CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
+if [[ -n "${GPU_LIST:-}" ]]; then
+    CUDA_VISIBLE_DEVICES="$GPU_LIST"
+else
+    CUDA_VISIBLE_DEVICES="$(seq -s, 0 $((NUM_SHARDS - 1)))"
+fi
 export CUDA_VISIBLE_DEVICES
 
 TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"

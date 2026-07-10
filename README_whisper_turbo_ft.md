@@ -30,6 +30,13 @@ PROXY_URL=http://user:pass%40@host:port bash scripts/prestage_offline.sh
 qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
 ```
 
+**別案: `res=middle`(2GPU, ネット接続可) でオンライン実行** — prestage不要。GPU枚数は
+`NUM_SHARDS` から自動導出するので `CUDA_VISIBLE_DEVICES` を渡す必要はない。
+
+```bash
+qsub -l select=1:res=middle -v "NUM_SHARDS=2,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+```
+
 `OFFLINE=1` で `UV_OFFLINE`/`HF_HUB_OFFLINE`/`TRANSFORMERS_OFFLINE` を立て、`uv sync` は
 キャッシュのみ、モデルDLもキャッシュから読む。ノードがネットに繋がる場合は不要。
 
