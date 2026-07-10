@@ -18,13 +18,18 @@
 #
 # NUM_SHARDS sets both GPU count and DDP processes; GPUs are auto-derived from it.
 #
+# RECOMMENDED: prestage on the login node first (it does ALL network I/O: uv sync,
+# HF models, Kokoro isolated env + its dictionaries), then run OFFLINE on the GPU
+# node. Compute nodes (A100/xan_s, V100/middle2) often cannot download.
+#   login:  PROXY_URL=http://user:pass%40@host:port bash scripts/prestage_offline.sh
+#   A100:   qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
+#
 # Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
-#   # default: A100 x2 (xan_s/res=middle), Kokoro TTS, online:
-#   qsub -v "PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
-#   # Qwen3-TTS instead of Kokoro:
-#   qsub -v "TTS_BACKEND=qwen3,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
-#   # V100 x4 offline on res=middle2 (after scripts/prestage_offline.sh):
+#   qsub -v OFFLINE=1 scripts/run_whisper_train.pbs                     # A100 x2, Kokoro
+#   qsub -v "OFFLINE=1,TTS_BACKEND=qwen3" scripts/run_whisper_train.pbs # Qwen3-TTS instead
 #   qsub -q xvn_s -l select=1:res=middle2 -v "OFFLINE=1,NUM_SHARDS=4" scripts/run_whisper_train.pbs
+#   # only if the GPU node truly has internet, online (no prestage):
+#   qsub -v "PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
 #
 # TTS progress is printed to this log as [tts-progress] every PROGRESS_EVERY sec
 # (default 30). Per-utterance detail with ETA is in out/.../tts_data/shard_*.log.
@@ -171,8 +176,12 @@ else
             --with "torch==$TORCH_VERSION"
             --with "torchaudio==$TORCHAUDIO_VERSION"
         )
-        echo "[kokoro] downloading unidic dictionary..."
-        "${KOKORO_UV[@]}" python -m unidic download
+        if [[ "$OFFLINE" == "1" ]]; then
+            echo "[kokoro] OFFLINE: reusing prestaged isolated env + dictionaries (no download)"
+        else
+            echo "[kokoro] downloading unidic dictionary..."
+            "${KOKORO_UV[@]}" python -m unidic download
+        fi
     fi
 
     # split tts_input into NUM_SHARDS parts

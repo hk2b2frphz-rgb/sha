@@ -20,30 +20,36 @@ whisper-streaming で評価する、ワンパスの手順。
 ## ノード / TTSバックエンド
 
 既定は **A100×2 (`xan_s` / `res=middle`) + Kokoro-TTS**。`run_whisper_train.pbs` に
-`#PBS -q xan_s` / `#PBS -l select=1:res=middle` が入っているので、そのまま投げるとA100で動く。
+`#PBS -q xan_s` / `#PBS -l select=1:res=middle` が入っている。
+
+**計算ノード(A100/V100)は辞書などをダウンロードできないことが多い**(実際にKokoroの
+unidic/pyopenjtalk辞書取得で落ちる)。そこで **ネット通信は全部ログインノードのprestageで
+先に済ませ、学習はオフライン(`OFFLINE=1`)で回す** のを標準手順とする。
 
 ```bash
-# 既定 (A100×2, Kokoro, オンライン)
-qsub -v "PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+# 1) ログインノードで全ネット処理を先に実行
+#    (.venv + HFキャッシュ(whisper) + Kokoro隔離env + その辞書/モデル + vendor)
+PROXY_URL=http://user:pass%40@host:port bash scripts/prestage_offline.sh
+
+# 2) A100×2でオフライン実行 (Kokoro)
+qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
 
 # Qwen3-TTS に切替
-qsub -v "TTS_BACKEND=qwen3,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
-```
+qsub -v "OFFLINE=1,TTS_BACKEND=qwen3" scripts/run_whisper_train.pbs
 
-Kokoro は依存が本体と衝突する(misaki[ja]がfull unidicを要求 vs 本体のunidic-lite)ため、
-**隔離env** (`uv run --isolated --with kokoro ... --with 'misaki[ja]'`) で動かす。ジョブが
-自動でその env を作り `python -m unidic download` する(初回は少し時間がかかる)。
-
-**V100×4 (`res=middle2`) で回す場合はネット遮断なのでオフライン実行**:
-
-```bash
-# 1) ネット可能ノードで事前DL (.venv + HFキャッシュ + Kokoro隔離env + vendor)
-PROXY_URL=http://user:pass%40@host:port bash scripts/prestage_offline.sh
-# 2) V100×4でオフライン実行
+# V100×4 (res=middle2) の場合
 qsub -q xvn_s -l select=1:res=middle2 -v "OFFLINE=1,NUM_SHARDS=4" scripts/run_whisper_train.pbs
 ```
 
+prestage は Kokoro隔離env を実際に **1文合成してウォームアップ**し、遅延ダウンロード
+(unidic辞書・pyopenjtalk辞書・misaki・Kokoroモデル) を全て誘発してキャッシュに載せる。
+`OFFLINE=1` の学習ジョブは同じ `--with` セットで隔離env を再利用し、ネットに一切出ない。
+
+Kokoro は依存が本体と衝突(misaki[ja]がfull unidicを要求 vs 本体のunidic-lite)するため
+**隔離env** で動かす。共有FS(リポジトリ配下 + `~/.cache` )経由で計算ノードが読む前提。
+
 GPU枚数は `NUM_SHARDS` から自動導出(既定2)。`CUDA_VISIBLE_DEVICES` を渡す必要はない。
+計算ノードが本当にネット接続可なら `qsub -v "PROXY_URL=..."` でオンライン実行も可。
 
 **進捗表示**: メインのジョブログに `[tts-progress] 済/総 (％) elapsed=...` を
 `PROGRESS_EVERY`秒(既定30)ごとに出力。1文ごとの詳細(ETA付き)は
