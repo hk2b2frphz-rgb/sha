@@ -59,7 +59,14 @@ if [[ ! -d "$MODEL_DIR" ]]; then
     exit 1
 fi
 
-uv sync
+echo "===== network preflight ====="
+echo "http_proxy=${http_proxy:-unset}  https_proxy=${https_proxy:-unset}"
+echo "no_proxy=${no_proxy:-unset}"
+export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
+export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-60}"
+echo "UV_HTTP_TIMEOUT=$UV_HTTP_TIMEOUT  HF_HUB_DOWNLOAD_TIMEOUT=$HF_HUB_DOWNLOAD_TIMEOUT"
+echo "===== uv sync (verbose) ====="
+uv sync -v
 
 if [[ ! -d "$WHISPER_STREAMING_DIR/.git" ]]; then
     git clone https://github.com/ufal/whisper_streaming.git "$WHISPER_STREAMING_DIR"

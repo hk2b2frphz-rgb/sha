@@ -119,3 +119,52 @@ proxy_display="${proxy_url#*://}"
 proxy_display="${proxy_display#*@}"
 proxy_display="${proxy_display%%/*}"
 echo "[proxy] enabled: ${proxy_display}"
+
+# --- diagnostics -----------------------------------------------------------
+# Set PROXY_DEBUG=0 to silence. Probes are informational and never fail the job.
+if [[ "${PROXY_DEBUG:-1}" == "1" ]]; then
+    masked_url="$(printf '%s' "$proxy_url" | sed -E 's#(://[^:/@]+:)[^@]*@#\1****@#')"
+    echo "[proxy] http_proxy=${masked_url}"
+    echo "[proxy] no_proxy=${no_proxy:-}"
+    if [[ -n "${PROXY_URL:-}" ]]; then proxy_src="PROXY_URL"
+    elif [[ -n "${PROXY_HOST:-}" ]]; then proxy_src="PROXY_HOST"
+    else proxy_src="inherited_env"; fi
+    echo "[proxy] source=${proxy_src}"
+    if [[ -n "$proxy_python" ]]; then
+        PROXY_CHECK_URL="$proxy_url" \
+        PROXY_TARGETS="${PROXY_TARGETS:-https://huggingface.co https://pypi.org https://download.pytorch.org}" \
+        "$proxy_python" - <<'PY' || true
+import os, socket, time
+from urllib.parse import urlsplit
+from urllib.request import build_opener, ProxyHandler, Request
+
+purl = os.environ["PROXY_CHECK_URL"]
+p = urlsplit(purl if "://" in purl else "http://" + purl)
+host, port = p.hostname, p.port or (443 if p.scheme == "https" else 80)
+print(f"[proxy-check] proxy host={host} port={port} scheme={p.scheme} "
+      f"user={'set' if p.username else 'none'}")
+
+t = time.time()
+try:
+    with socket.create_connection((host, port), timeout=8):
+        print(f"[proxy-check] TCP connect to proxy OK ({time.time()-t:.1f}s)")
+except Exception as e:
+    print(f"[proxy-check] TCP connect to proxy FAILED ({time.time()-t:.1f}s): "
+          f"{type(e).__name__}: {e}")
+
+opener = build_opener(ProxyHandler({"http": purl, "https": purl}))
+for tgt in os.environ["PROXY_TARGETS"].split():
+    t = time.time()
+    try:
+        r = opener.open(Request(tgt, method="HEAD"), timeout=12)
+        print(f"[proxy-check] {tgt} via proxy OK status={r.status} "
+              f"({time.time()-t:.1f}s)")
+        r.close()
+    except Exception as e:
+        print(f"[proxy-check] {tgt} via proxy FAILED ({time.time()-t:.1f}s): "
+              f"{type(e).__name__}: {e}")
+PY
+    else
+        echo "[proxy-check] no python found for connectivity probe"
+    fi
+fi
