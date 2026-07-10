@@ -56,6 +56,10 @@ def load_model(args: argparse.Namespace) -> Any:
     import torch
     from qwen_tts import Qwen3TTSModel
 
+    # TF32: 高速化 (A100/Ampere以降で有効)。TTS品質への影響はほぼ無い。
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
     dtype = {
         "bfloat16": torch.bfloat16,
         "float16": torch.float16,

@@ -22,9 +22,14 @@
 # Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
 #   # 2-GPU online on res=middle (has network):
 #   qsub -l select=1:res=middle -v "NUM_SHARDS=2,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+#   # A100 (faster TTS): queue xan_s. bf16 is native on A100.
+#   qsub -q xan_s -l select=1:res=middle -v "NUM_SHARDS=2,TTS_DTYPE=bfloat16,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
 #   # 4-GPU offline on res=middle2 (after scripts/prestage_offline.sh):
 #   qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
 #   qsub -v "OFFLINE=1,EPOCHS=8,LORA_R=64" scripts/run_whisper_train.pbs
+#
+# TTS progress is printed to this log as [tts-progress] every PROGRESS_EVERY sec
+# (default 30). Per-utterance detail with ETA is in out/.../tts_data/shard_*.log.
 
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$(pwd)}"
@@ -173,8 +178,38 @@ PY
         pids+=("$!")
         echo "started $shard_tag on gpu $gpu_id (log=$shard_log)"
     done
+
+    # Aggregate progress into the MAIN job log every PROGRESS_EVERY seconds by
+    # counting completed rows across shard manifests (per-utterance detail is in
+    # the shard_*.log files). Runs in the background; stopped after shards finish.
+    tts_total="$(grep -c . "$TTS_INPUT" 2>/dev/null || echo 0)"
+    PROGRESS_EVERY="${PROGRESS_EVERY:-30}"
+    (
+        mon_start=$(date +%s)
+        while true; do
+            done_n=0
+            for ((i = 0; i < NUM_SHARDS; i++)); do
+                m="$DATA_ROOT/$(printf 'shard_%02d' "$i")/manifest.jsonl"
+                if [[ -f "$m" ]]; then
+                    c=$(grep -c . "$m" 2>/dev/null || echo 0)
+                    done_n=$((done_n + c))
+                fi
+            done
+            el=$(( $(date +%s) - mon_start ))
+            pct=0; [[ "$tts_total" -gt 0 ]] && pct=$(( done_n * 100 / tts_total ))
+            rate=""; [[ "$done_n" -gt 0 ]] && rate=" ~$(( el / (done_n>0?done_n:1) ))s/utt"
+            echo "[tts-progress] ${done_n}/${tts_total} (${pct}%) elapsed=${el}s${rate}"
+            [[ "$tts_total" -gt 0 && "$done_n" -ge "$tts_total" ]] && break
+            sleep "$PROGRESS_EVERY"
+        done
+    ) &
+    monitor_pid=$!
+
     failed=0
     for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+    kill "$monitor_pid" 2>/dev/null || true
+    wait "$monitor_pid" 2>/dev/null || true
+    echo "[tts-progress] all shards finished"
     if [[ "$failed" != "0" ]]; then
         echo "ERROR: a TTS shard failed. See $DATA_ROOT/shard_*.log" >&2
         exit 1

@@ -37,6 +37,17 @@ qsub -v OFFLINE=1 scripts/run_whisper_train.pbs
 qsub -l select=1:res=middle -v "NUM_SHARDS=2,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
 ```
 
+**TTSを速くしたい: A100 (`xan_s`キュー)** — A100はbf16ネイティブで速い。TF32も自動有効。
+
+```bash
+qsub -q xan_s -l select=1:res=middle -v "NUM_SHARDS=2,TTS_DTYPE=bfloat16,PROXY_URL=http://user:pass%40@host:port" scripts/run_whisper_train.pbs
+```
+
+**進捗表示**: メインのジョブログに `[tts-progress] 済/総 (％) elapsed=...` を
+`PROGRESS_EVERY`秒(既定30)ごとに出力。1文ごとの詳細(ETA付き)は
+`out/whisper_turbo/tts_data/shard_*.log` に出る。TTSは自己回帰生成なので単体の
+高速化は限定的で、実質の短縮は「GPUを増やす(NUM_SHARDS)」「A100を使う」が効く。
+
 `OFFLINE=1` で `UV_OFFLINE`/`HF_HUB_OFFLINE`/`TRANSFORMERS_OFFLINE` を立て、`uv sync` は
 キャッシュのみ、モデルDLもキャッシュから読む。ノードがネットに繋がる場合は不要。
 
