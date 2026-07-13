@@ -57,10 +57,18 @@ def resolve_base_model(args: argparse.Namespace) -> str:
             f"ベースモデル未指定で {args.base_model_file} も無い。"
             " --base-model を渡すか manifest.txt を用意してください。"
         )
-    for raw in args.base_model_file.read_text(encoding="utf-8").splitlines():
+    lines = args.base_model_file.read_text(encoding="utf-8").splitlines()
+    # manifest.txt may also hold batch-evaluation settings. Prefer its explicit
+    # BASE_MODEL setting, while retaining the original one-model-per-file form.
+    for raw in lines:
+        line = raw.strip()
+        if line.startswith("BASE_MODEL=") and line.removeprefix("BASE_MODEL=").strip():
+            return line.removeprefix("BASE_MODEL=").strip()
+    for raw in lines:
         line = raw.strip()
         if line and not line.startswith("#"):
-            return line
+            if "=" not in line:
+                return line
     raise SystemExit(f"{args.base_model_file} に有効なパスがありません")
 
 

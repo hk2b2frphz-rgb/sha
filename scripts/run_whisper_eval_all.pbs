@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N ws_turbo_eval_all
+#PBS -q xvn_s
+#PBS -l select=1:res=small
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -V
+
+# Evaluate each CT2 Whisper model in manifest.txt against the same wavs and
+# references. See README_whisper_batch_eval.md for the manifest format.
+#
+# Submit:
+#   qsub scripts/run_whisper_eval_all.pbs
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$PWD/scripts/setup_proxy.sh"
+fi
+
+CONFIG="${CONFIG:-configs/whisper_streaming_eval.yaml}"
+SETTINGS_FILE="${SETTINGS_FILE:-manifest.txt}"
+WAV_DIR="${WAV_DIR:-}"
+REFS="${REFS:-}"
+EVAL_MANIFEST="${EVAL_MANIFEST:-out/whisper_turbo/test_manifest.jsonl}"
+OUT_DIR="${OUT_DIR:-experiments/whisper_turbo_eval_all}"
+WHISPER_STREAMING_DIR="${WHISPER_STREAMING_DIR:-vendor/whisper_streaming}"
+WHISPER_STREAMING_REF="${WHISPER_STREAMING_REF:-main}"
+CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES WHISPER_STREAMING_DIR
+
+mkdir -p logs experiments/pbs_logs vendor "$(dirname "$EVAL_MANIFEST")" "$OUT_DIR"
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/ws_turbo_eval_all_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+echo "===== batch whisper streaming eval ====="
+echo "settings:     $SETTINGS_FILE"
+echo "out_dir:     $OUT_DIR"
+
+command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
+[[ -s "$SETTINGS_FILE" ]] || { echo "ERROR: manifest is missing or empty: $SETTINGS_FILE" >&2; exit 1; }
+
+manifest_value() {
+    awk -v key="$1" 'index($0, key "=") == 1 { value = substr($0, length(key) + 2) } END { sub(/\r$/, "", value); print value }' "$SETTINGS_FILE"
+}
+
+[[ -n "$WAV_DIR" ]] || WAV_DIR="$(manifest_value WAV_DIR)"
+[[ -n "$REFS" ]] || REFS="$(manifest_value REFS)"
+MODELS_FILE="$OUT_DIR/models.tsv"
+awk 'index($0, "MODEL=") == 1 { print substr($0, 7) }' "$SETTINGS_FILE" | sed 's/\r$//' > "$MODELS_FILE"
+
+echo "wav_dir:      ${WAV_DIR:-missing}"
+echo "refs:         ${REFS:-missing}"
+echo "eval_manifest: $EVAL_MANIFEST"
+echo "models:       $(grep -c . "$MODELS_FILE" || true)"
+[[ -s "$MODELS_FILE" ]] || { echo "ERROR: no MODEL=<label><TAB><CT2_dir> rows in $SETTINGS_FILE" >&2; exit 1; }
+[[ -n "$REFS" && -s "$REFS" ]] || { echo "ERROR: REFS is required for a valid model comparison." >&2; exit 1; }
+[[ -d "$WAV_DIR" ]] || { echo "ERROR: WAV_DIR does not exist: $WAV_DIR" >&2; exit 1; }
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
+
+export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
+export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-60}"
+uv sync -v
+
+if [[ ! -d "$WHISPER_STREAMING_DIR/.git" ]]; then
+    git clone https://github.com/ufal/whisper_streaming.git "$WHISPER_STREAMING_DIR"
+fi
+git -C "$WHISPER_STREAMING_DIR" fetch --depth 1 origin "$WHISPER_STREAMING_REF" || true
+git -C "$WHISPER_STREAMING_DIR" checkout "$WHISPER_STREAMING_REF"
+
+uv run python scripts/build_test_manifest.py \
+    --wav-dir "$WAV_DIR" --references "$REFS" --out "$EVAL_MANIFEST"
+test -s "$EVAL_MANIFEST"
+
+while IFS=$'\t' read -r label model_dir extra || [[ -n "${label:-}" ]]; do
+    [[ -z "${label// /}" || "$label" == \#* ]] && continue
+    if [[ -n "${extra:-}" || -z "${model_dir:-}" || ! "$label" =~ ^[A-Za-z0-9._-]+$ ]]; then
+        echo "ERROR: invalid MODELS_FILE row. Use: label<TAB>CT2_model_dir (safe label only)" >&2
+        exit 1
+    fi
+    if [[ ! -d "$model_dir" || ! -s "$model_dir/model.bin" ]]; then
+        echo "ERROR: CT2 model not found or incomplete for $label: $model_dir" >&2
+        exit 1
+    fi
+    echo "===== evaluating $label ($model_dir) ====="
+    uv run python scripts/evaluate_whisper_streaming.py \
+        --config "$CONFIG" \
+        --model-dir "$model_dir" \
+        --manifest "$EVAL_MANIFEST" \
+        --out-dir "$OUT_DIR/$label"
+done < "$MODELS_FILE"
+
+uv run python scripts/summarize_whisper_evals.py \
+    --models-file "$MODELS_FILE" --results-dir "$OUT_DIR"
+
+echo "summary: $OUT_DIR/summary.md"
+echo "finished_at: $(date -Iseconds)"
