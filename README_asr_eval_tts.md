@@ -3,6 +3,13 @@
 `scripts/run_asr_eval_data_tts.pbs` rebuilds only the test WAVs used for
 Whisper evaluation. It does not train or alter a Whisper model.
 
+The input sentence file remains in its original Japanese form. Before synthesis,
+the PBS passes `data/annotations.tsv` to the preparation step, which replaces
+only matching technical terms with their readings. It does not convert the
+entire sentence to hiragana. The mapping file can be tab-separated TSV or
+comma-separated CSV (including a `.tsv` file containing commas). Supply
+another mapping with `READINGS_TSV=...`.
+
 ## Neutral male Japanese TTS
 
 To generate the existing test set with Kokoro's Japanese male voice
@@ -17,7 +24,7 @@ The generated files replace the WAVs under
 `data/asr_eval_sentences.txt`. `CLEAN_WAV_DIR=1` is the default, which prevents
 old WAVs from accidentally being included in evaluation.
 
-The generated WAVs include 250 ms of leading silence by default. This prevents
+The generated WAVs include 500 ms of leading silence by default. This prevents
 the first phoneme from being clipped during playback or streaming evaluation.
 Override it with `LEAD_SILENCE_MS`, for example `LEAD_SILENCE_MS=0` to disable
 the padding.

@@ -24,7 +24,9 @@ if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
 fi
 
 SENTENCES_TXT="${SENTENCES_TXT:-data/asr_eval_sentences.txt}"
-READINGS_TSV="${READINGS_TSV:-}"
+# Keep the original sentence intact and replace only matching technical terms
+# with their readings before TTS. Set READINGS_TSV to another mapping as needed.
+READINGS_TSV="${READINGS_TSV:-data/annotations.tsv}"
 OUT_DIR="${OUT_DIR:-out/whisper_streaming_eval/audio}"
 EVAL_JSONL="${EVAL_JSONL:-out/whisper_streaming_eval/sentences.jsonl}"
 TTS_BACKEND="${TTS_BACKEND:-qwen3}"
@@ -35,7 +37,7 @@ TTS_DTYPE="${TTS_DTYPE:-float16}"
 KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
 KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
 KOKORO_SPEED="${KOKORO_SPEED:-1.0}"
-LEAD_SILENCE_MS="${LEAD_SILENCE_MS:-250}"
+LEAD_SILENCE_MS="${LEAD_SILENCE_MS:-500}"
 CLEAN_WAV_DIR="${CLEAN_WAV_DIR:-1}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export CUDA_VISIBLE_DEVICES
