@@ -2,9 +2,10 @@
 
 `scripts/run_whisper_eval_all.pbs` evaluates many CTranslate2 (CT2) Whisper
 models against exactly the same audio and reference texts. It reserves V100 x4
-(`xvn_s` / `res=middle2`) and runs models sequentially, rotating the assigned
-GPU between models. A missing or failed model is recorded and does not stop the
-remaining evaluations. All server-specific settings live in the root
+(`xvn_s` / `res=middle2`) and evaluates up to four models in parallel, one per
+GPU. Additional models run in the next batch. A missing or failed model is
+recorded and does not stop the remaining evaluations. All server-specific
+settings live in the root
 `manifest.txt`, which is intentionally ignored by Git.
 
 ## 1. Edit `manifest.txt`
