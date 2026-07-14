@@ -1,9 +1,10 @@
 # Whisper models: batch evaluation
 
 `scripts/run_whisper_eval_all.pbs` evaluates many CTranslate2 (CT2) Whisper
-models against exactly the same audio and reference texts. It runs the models
-sequentially on one GPU, so results are directly comparable and GPU memory is
-not shared between models. All server-specific settings live in the root
+models against exactly the same audio and reference texts. It reserves V100 x4
+(`xvn_s` / `res=middle2`) and runs models sequentially, rotating the assigned
+GPU between models. A missing or failed model is recorded and does not stop the
+remaining evaluations. All server-specific settings live in the root
 `manifest.txt`, which is intentionally ignored by Git.
 
 ## 1. Edit `manifest.txt`
@@ -63,3 +64,4 @@ The batch also produces these files:
 - `experiments/whisper_turbo_eval_all/summary.csv` — spreadsheet-friendly data
 
 Models are ranked by lower CER, then lower WER, then higher inference speed.
+Skipped and failed models are also listed in the summary without a rank.

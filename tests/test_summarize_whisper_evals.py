@@ -23,3 +23,20 @@ def test_summary_ranks_by_cer_then_wer_then_speed(tmp_path: Path):
     report = (tmp_path / "results" / "summary.md").read_text(encoding="utf-8")
     assert "| 1 | accurate |" in report
     assert "| 2 | fast |" in report
+
+
+def test_summary_includes_missing_model_as_skipped(tmp_path: Path):
+    models = tmp_path / "models.tsv"
+    models.write_text("missing\t/model/missing\n", encoding="utf-8")
+    result = tmp_path / "results" / "missing"
+    result.mkdir(parents=True)
+    (result / "status.txt").write_text("status=skipped\nreason=model.bin is missing\n", encoding="utf-8")
+
+    subprocess.run(
+        [sys.executable, "scripts/summarize_whisper_evals.py", "--models-file", str(models), "--results-dir", str(tmp_path / "results")],
+        check=True,
+    )
+
+    report = (tmp_path / "results" / "summary.md").read_text(encoding="utf-8")
+    assert "| - | missing | skipped |" in report
+    assert "model.bin is missing" in report
