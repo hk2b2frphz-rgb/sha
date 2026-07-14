@@ -138,7 +138,9 @@ if [[ "${PROXY_DEBUG:-1}" == "1" ]]; then
     echo "[proxy] source=${proxy_src}"
     echo "[proxy-check] node hostname: $(hostname)"
 
-    proxy_targets="${PROXY_TARGETS:-https://huggingface.co https://pypi.org https://download.pytorch.org}"
+    # Check the exact CUDA 12.1 Torch simple index used by pyproject.toml,
+    # rather than the download.pytorch.org root page.
+    proxy_targets="${PROXY_TARGETS:-https://huggingface.co https://pypi.org https://download.pytorch.org/whl/cu121/torch/}"
     proxy_host_only="$(printf '%s' "$proxy_display")"
 
     # DNS resolution of the proxy host.
