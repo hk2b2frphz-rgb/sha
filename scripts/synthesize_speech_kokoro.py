@@ -42,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--voice", default="jf_alpha", help="Kokoro 日本語ボイス名")
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--lead-silence-ms", type=int, default=0, help="WAV先頭に付与する無音（ミリ秒）")
+    parser.add_argument("--prepend-pause", action="store_true", help="合成時だけ文頭に読点を付ける")
     parser.add_argument("--device", default="cuda")
     return parser.parse_args()
 
@@ -93,6 +94,11 @@ def add_lead_silence(audio: np.ndarray, sample_rate: int, milliseconds: int) -> 
     return np.concatenate((np.zeros(samples, dtype=np.float32), audio.astype(np.float32, copy=False)))
 
 
+def prepare_tts_text(text: str, prepend_pause: bool) -> str:
+    """Give the model a pause token before the first phoneme without changing the transcript."""
+    return f"、{text}" if prepend_pause else text
+
+
 def main() -> None:
     args = parse_args()
     records = load_sentences(args.sentences)
@@ -110,7 +116,7 @@ def main() -> None:
     with manifest_path.open("w", encoding="utf-8") as fh:
         for i, rec in enumerate(records, 1):
             text = rec.get("tts_text") or rec["sentence"]
-            audio = synthesize(pipeline, args, text)
+            audio = synthesize(pipeline, args, prepare_tts_text(text, args.prepend_pause))
             audio = add_lead_silence(audio, SAMPLE_RATE, args.lead_silence_ms)
             wav_path = wav_dir / f"{rec['id']}.wav"
             sf.write(wav_path, audio, SAMPLE_RATE, subtype="PCM_16")
