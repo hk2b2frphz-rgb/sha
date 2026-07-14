@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     # jm_kumo (男性)
     parser.add_argument("--voice", default="jf_alpha", help="Kokoro 日本語ボイス名")
     parser.add_argument("--speed", type=float, default=1.0)
+    parser.add_argument("--lead-silence-ms", type=int, default=0, help="WAV先頭に付与する無音（ミリ秒）")
     parser.add_argument("--device", default="cuda")
     return parser.parse_args()
 
@@ -84,6 +85,14 @@ def synthesize(pipeline: Any, args: argparse.Namespace, text: str) -> np.ndarray
     return np.concatenate(chunks).astype(np.float32, copy=False)
 
 
+def add_lead_silence(audio: np.ndarray, sample_rate: int, milliseconds: int) -> np.ndarray:
+    """Add leading silence so playback/streaming does not clip the first phoneme."""
+    samples = round(sample_rate * milliseconds / 1000)
+    if samples <= 0:
+        return audio
+    return np.concatenate((np.zeros(samples, dtype=np.float32), audio.astype(np.float32, copy=False)))
+
+
 def main() -> None:
     args = parse_args()
     records = load_sentences(args.sentences)
@@ -102,6 +111,7 @@ def main() -> None:
         for i, rec in enumerate(records, 1):
             text = rec.get("tts_text") or rec["sentence"]
             audio = synthesize(pipeline, args, text)
+            audio = add_lead_silence(audio, SAMPLE_RATE, args.lead_silence_ms)
             wav_path = wav_dir / f"{rec['id']}.wav"
             sf.write(wav_path, audio, SAMPLE_RATE, subtype="PCM_16")
             entry = {

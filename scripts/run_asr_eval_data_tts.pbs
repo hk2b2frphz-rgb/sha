@@ -35,6 +35,7 @@ TTS_DTYPE="${TTS_DTYPE:-float16}"
 KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
 KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
 KOKORO_SPEED="${KOKORO_SPEED:-1.0}"
+LEAD_SILENCE_MS="${LEAD_SILENCE_MS:-250}"
 CLEAN_WAV_DIR="${CLEAN_WAV_DIR:-1}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export CUDA_VISIBLE_DEVICES
@@ -52,6 +53,7 @@ echo "readings_tsv:  ${READINGS_TSV:-none}"
 echo "eval_jsonl:    $EVAL_JSONL"
 echo "out_dir:       $OUT_DIR"
 echo "tts_backend:   $TTS_BACKEND"
+echo "lead_silence:  ${LEAD_SILENCE_MS}ms"
 echo "clean_wav_dir: $CLEAN_WAV_DIR"
 if [[ "$TTS_BACKEND" == "kokoro" ]]; then
     echo "kokoro_model:  $KOKORO_MODEL"
@@ -71,6 +73,10 @@ if [[ -n "$READINGS_TSV" && ! -s "$READINGS_TSV" ]]; then
 fi
 if [[ "$TTS_BACKEND" != "qwen3" && "$TTS_BACKEND" != "kokoro" ]]; then
     echo "ERROR: TTS_BACKEND must be qwen3 or kokoro: $TTS_BACKEND" >&2
+    exit 1
+fi
+if ! [[ "$LEAD_SILENCE_MS" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: LEAD_SILENCE_MS must be a non-negative integer: $LEAD_SILENCE_MS" >&2
     exit 1
 fi
 if [[ "$CLEAN_WAV_DIR" == "1" ]]; then
@@ -114,6 +120,7 @@ if [[ "$TTS_BACKEND" == "kokoro" ]]; then
         --model-id "$KOKORO_MODEL" \
         --voice "$KOKORO_VOICE" \
         --speed "$KOKORO_SPEED" \
+        --lead-silence-ms "$LEAD_SILENCE_MS" \
         --device "cuda"
 else
     uv run python scripts/synthesize_speech.py \
@@ -122,7 +129,8 @@ else
         --model "$TTS_MODEL" \
         --speaker "$TTS_SPEAKER" \
         --device "$TTS_DEVICE" \
-        --dtype "$TTS_DTYPE"
+        --dtype "$TTS_DTYPE" \
+        --lead-silence-ms "$LEAD_SILENCE_MS"
 fi
 
 echo "manifest: $OUT_DIR/manifest.jsonl"

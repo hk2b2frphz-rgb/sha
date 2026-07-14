@@ -17,6 +17,11 @@ The generated files replace the WAVs under
 `data/asr_eval_sentences.txt`. `CLEAN_WAV_DIR=1` is the default, which prevents
 old WAVs from accidentally being included in evaluation.
 
+The generated WAVs include 250 ms of leading silence by default. This prevents
+the first phoneme from being clipped during playback or streaming evaluation.
+Override it with `LEAD_SILENCE_MS`, for example `LEAD_SILENCE_MS=0` to disable
+the padding.
+
 The default Kokoro voice is the neutral Japanese female voice `jf_alpha`:
 
 ```bash

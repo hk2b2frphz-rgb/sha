@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--speaker", default="Ono_Anna", help="Qwen3-TTS プリセット話者名")
     parser.add_argument("--language", default="Japanese")
     parser.add_argument("--instruct", default=None, help="話し方のスタイル指示 (省略可)")
+    parser.add_argument("--lead-silence-ms", type=int, default=0, help="WAV先頭に付与する無音（ミリ秒）")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--dtype", choices=["bfloat16", "float16", "float32"], default="bfloat16")
     return parser.parse_args()
@@ -89,6 +90,14 @@ def synthesize(model: Any, args: argparse.Namespace, text: str) -> tuple[np.ndar
     return np.asarray(audio, dtype=np.float32).squeeze(), int(sr)
 
 
+def add_lead_silence(audio: np.ndarray, sample_rate: int, milliseconds: int) -> np.ndarray:
+    """Add leading silence so playback/streaming does not clip the first phoneme."""
+    samples = round(sample_rate * milliseconds / 1000)
+    if samples <= 0:
+        return audio
+    return np.concatenate((np.zeros(samples, dtype=np.float32), audio.astype(np.float32, copy=False)))
+
+
 def main() -> None:
     args = parse_args()
     records = load_sentences(args.sentences)
@@ -108,6 +117,7 @@ def main() -> None:
             # annotate_readings.py で付与した tts_text があればそちらを使う
             text = rec.get("tts_text") or rec["sentence"]
             audio, sr = synthesize(model, args, text)
+            audio = add_lead_silence(audio, sr, args.lead_silence_ms)
             wav_path = wav_dir / f"{rec['id']}.wav"
             sf.write(wav_path, audio, sr, subtype="PCM_16")
             entry = {
