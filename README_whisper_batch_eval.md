@@ -8,7 +8,7 @@ not shared between models. All server-specific settings live in the root
 
 ## 1. Edit `manifest.txt`
 
-Set the test WAV directory, its keyed reference TSV, and one or more models.
+Set the test WAV directory, its positional reference text file, and one or more models.
 Each `MODEL=` value is a tab-separated pair of a unique label and CT2 model
 directory. Labels may only contain letters, digits, `.`, `_`, and `-`.
 
@@ -35,13 +35,19 @@ truth rather than performing transcription only.
 qsub scripts/run_whisper_eval_all.pbs
 ```
 
-The reference file should use keyed TSV to avoid accidental WAV-order
-mismatches:
+`REFS` may be a plain `.txt` file containing one correct sentence per line.
+The lines are paired with WAV files in natural filename order (`1.wav`,
+`2.wav`, `10.wav`). Blank lines and lines beginning with `#` are ignored.
+The reference-line count must therefore match the WAV-file count.
 
-```tsv
-001.wav	正解文です
-002.wav	次の正解文です
+```text
+1番目の正解文
+2番目の正解文
+10番目の正解文
 ```
+
+Keyed TSV (`001.wav<TAB>正解文`) is also accepted when a filename-based
+mapping is preferable.
 
 ## Results
 
