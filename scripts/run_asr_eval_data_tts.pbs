@@ -17,6 +17,12 @@
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 
+# Configure proxy variables for uv and the isolated Kokoro environment.
+if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$PWD/scripts/setup_proxy.sh"
+fi
+
 SENTENCES_TXT="${SENTENCES_TXT:-data/asr_eval_sentences.txt}"
 READINGS_TSV="${READINGS_TSV:-}"
 OUT_DIR="${OUT_DIR:-out/whisper_streaming_eval/audio}"
