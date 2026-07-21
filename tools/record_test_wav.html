@@ -166,12 +166,6 @@
     <div class="sentence" id="curSentence">—</div>
     <div class="meter"><div id="meterBar"></div></div>
     <div class="status" id="status">準備完了</div>
-    <div style="text-align:center; margin-bottom:12px;">
-      <label style="display:inline-flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
-        <input type="checkbox" id="autoNext" checked style="width:auto;">
-        録音後に自動で次の文へ進む
-      </label>
-    </div>
     <div class="btnbar" style="justify-content:center;">
       <button class="ghost" id="prevBtn">◀ 前へ</button>
       <button class="rec" id="recBtn">● 録音（Space）</button>
@@ -319,7 +313,7 @@ function startRec() {
   drawMeter();
 }
 
-function stopRec(fromNav) {
+function stopRec() {
   if (!recording) return;
   recording = false;
   procNode.disconnect(); srcNode.disconnect(procNode);
@@ -335,13 +329,8 @@ function stopRec(fromNav) {
   $("player").src = it.url; $("player").classList.remove("hidden");
   setTakeButtons(true);
   const secs = (mergeChunks(chunks).length / audioCtx.sampleRate).toFixed(1);
-  $("status").textContent = `録音完了（${secs} 秒） — ${it.name}`;
+  $("status").textContent = `録音完了（${secs} 秒） — 再生して確認できます`;
   renderList(); updateProgress();
-
-  // Auto-advance to the next sentence (unless the stop came from navigation).
-  if (!fromNav && $("autoNext").checked && cur < items.length - 1) {
-    setTimeout(() => { if (!recording) { cur++; showCurrent(); } }, 500);
-  }
 }
 
 function toggleRec() { recording ? stopRec() : startRec(); }
@@ -442,7 +431,7 @@ function delTake() {
   $("status").textContent = `削除しました（未録音） — ${it.name}`;
   renderList(); updateProgress();
 }
-function go(d) { if (recording) stopRec(true); cur = Math.max(0, Math.min(items.length - 1, cur + d)); showCurrent(); }
+function go(d) { if (recording) stopRec(); cur = Math.max(0, Math.min(items.length - 1, cur + d)); showCurrent(); }
 function updateProgress() {
   const done = items.filter(i => i.blob).length;
   $("progBar").style.width = (done / items.length * 100) + "%";
@@ -476,7 +465,7 @@ function renderList() {
       <span class="dot ${it.blob ? "done" : ""}"></span>
       <span class="txt">${escapeHtml(it.text)}</span>
       <span class="tag">${it.name}</span>`;
-    row.onclick = () => { if (recording) stopRec(true); cur = i; showCurrent(); };
+    row.onclick = () => { if (recording) stopRec(); cur = i; showCurrent(); };
     el.appendChild(row);
   });
 }
