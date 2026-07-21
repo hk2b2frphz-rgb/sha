@@ -188,12 +188,12 @@
     </div>
     <div class="list" id="list"></div>
     <div class="btnbar" style="margin-top:16px;">
-      <button class="ok" id="saveDirBtn">📁 フォルダに保存（Chrome）</button>
+      <button class="ok" id="saveDirBtn">📁 フォルダに保存（Edge）</button>
       <button class="ghost" id="zipBtn">⬇ まとめてダウンロード（ZIP）</button>
       <button class="ghost" id="refsBtn">⬇ references.tsv のみ</button>
     </div>
     <div class="hint" id="exportHint" style="margin-top:10px;">
-      「フォルダに保存」は Chromium 系ブラウザで対応。<code>data/test_wav/</code> を選ぶと WAV と references.tsv が直接書き出されます。
+      「フォルダに保存」で <code>data/test_wav/</code> を選ぶと、WAV と references.tsv が直接書き出されます。
     </div>
   </div>
 </main>
@@ -488,7 +488,7 @@ $("refsBtn").onclick = () => {
 };
 
 $("saveDirBtn").onclick = async () => {
-  if (!window.showDirectoryPicker) { alert("このブラウザはフォルダ保存に未対応です。ZIP を使ってください。"); return; }
+  if (!window.showDirectoryPicker) { alert("Microsoft Edge で開いてください（フォルダ保存に必要です）。"); return; }
   const recorded = items.filter(i => i.blob);
   if (!recorded.length) { alert("録音済みの音声がありません。"); return; }
   try {
