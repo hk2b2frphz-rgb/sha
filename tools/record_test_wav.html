@@ -128,8 +128,14 @@
 <main>
   <!-- Setup -->
   <div class="card" id="setupCard">
-    <label>読み上げテキスト（1行 = 1文）。<code>#</code> 始まりと空行は無視されます。</label>
+    <div class="row" style="align-items:center; margin-bottom:6px;">
+      <label style="margin:0;">読み上げテキスト（1行 = 1文）。<code>#</code> 始まりと空行は無視されます。</label>
+      <div class="grow"></div>
+      <button class="ghost" id="loadFileBtn" style="padding:6px 12px; font-size:13px;">📄 txtファイルを読み込む</button>
+      <input type="file" id="fileInput" accept=".txt,.tsv,text/plain" class="hidden">
+    </div>
     <textarea id="sentences" placeholder="活性汚泥法は下水処理で広く使われています。&#10;最終沈殿池の運転状況を確認してください。&#10;膜分離活性汚泥法による処理性能を評価します。"></textarea>
+    <div class="hint" id="fileInfo"></div>
     <div class="row" style="margin-top:14px;">
       <div>
         <label>ファイル名の開始番号</label>
@@ -160,6 +166,12 @@
     <div class="sentence" id="curSentence">—</div>
     <div class="meter"><div id="meterBar"></div></div>
     <div class="status" id="status">準備完了</div>
+    <div style="text-align:center; margin-bottom:12px;">
+      <label style="display:inline-flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+        <input type="checkbox" id="autoNext" checked style="width:auto;">
+        録音後に自動で次の文へ進む
+      </label>
+    </div>
     <div class="btnbar" style="justify-content:center;">
       <button class="ghost" id="prevBtn">◀ 前へ</button>
       <button class="rec" id="recBtn">● 録音（Space）</button>
@@ -225,6 +237,24 @@ async function listMics() {
 listMics();
 navigator.mediaDevices.addEventListener?.("devicechange", listMics);
 
+// ---------- load sentences from a .txt file ----------
+$("loadFileBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = async () => {
+  const f = $("fileInput").files[0];
+  if (!f) return;
+  const text = await f.text();
+  // If TSV (has tabs), take the last column as the sentence; else raw lines.
+  const lines = text.split(/\r?\n/).map(l => {
+    const t = l.replace(/\r$/, "");
+    if (t.includes("\t")) { const c = t.split("\t"); return c[c.length - 1]; }
+    return t;
+  });
+  $("sentences").value = lines.join("\n");
+  const n = lines.map(s => s.trim()).filter(s => s && !s.startsWith("#")).length;
+  $("fileInfo").textContent = `読み込み: ${f.name}（有効 ${n} 文）`;
+  $("fileInput").value = "";
+};
+
 // ---------- start session ----------
 $("startBtn").onclick = async () => {
   const lines = $("sentences").value.split(/\r?\n/)
@@ -289,7 +319,7 @@ function startRec() {
   drawMeter();
 }
 
-function stopRec() {
+function stopRec(fromNav) {
   if (!recording) return;
   recording = false;
   procNode.disconnect(); srcNode.disconnect(procNode);
@@ -307,6 +337,11 @@ function stopRec() {
   const secs = (mergeChunks(chunks).length / audioCtx.sampleRate).toFixed(1);
   $("status").textContent = `録音完了（${secs} 秒） — ${it.name}`;
   renderList(); updateProgress();
+
+  // Auto-advance to the next sentence (unless the stop came from navigation).
+  if (!fromNav && $("autoNext").checked && cur < items.length - 1) {
+    setTimeout(() => { if (!recording) { cur++; showCurrent(); } }, 500);
+  }
 }
 
 function toggleRec() { recording ? stopRec() : startRec(); }
@@ -407,7 +442,7 @@ function delTake() {
   $("status").textContent = `削除しました（未録音） — ${it.name}`;
   renderList(); updateProgress();
 }
-function go(d) { if (recording) stopRec(); cur = Math.max(0, Math.min(items.length - 1, cur + d)); showCurrent(); }
+function go(d) { if (recording) stopRec(true); cur = Math.max(0, Math.min(items.length - 1, cur + d)); showCurrent(); }
 function updateProgress() {
   const done = items.filter(i => i.blob).length;
   $("progBar").style.width = (done / items.length * 100) + "%";
@@ -441,7 +476,7 @@ function renderList() {
       <span class="dot ${it.blob ? "done" : ""}"></span>
       <span class="txt">${escapeHtml(it.text)}</span>
       <span class="tag">${it.name}</span>`;
-    row.onclick = () => { if (recording) stopRec(); cur = i; showCurrent(); };
+    row.onclick = () => { if (recording) stopRec(true); cur = i; showCurrent(); };
     el.appendChild(row);
   });
 }
