@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #PBS -S /bin/bash
 #PBS -N ws_autoresearch
-#PBS -q xvn_s
-#PBS -l select=1:res=middle2
+#PBS -q xan_i
+#PBS -l select=1:res=small
 #PBS -l walltime=24:00:00
 #PBS -j oe
 #PBS -V
@@ -57,7 +57,7 @@ WAV_DIR="${WAV_DIR:-experiments/dataset/wav}"
 REFS="${REFS:-experiments/dataset/refs.txt}"
 TERMS="${TERMS:-}"
 
-NUM_GPUS="${NUM_GPUS:-4}"
+NUM_GPUS="${NUM_GPUS:-1}"
 if [[ -n "${GPU_LIST:-}" ]]; then
     CUDA_VISIBLE_DEVICES="$GPU_LIST"
 else

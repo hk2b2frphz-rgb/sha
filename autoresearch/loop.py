@@ -367,10 +367,16 @@ def run_loop(settings: LoopSettings) -> int:
     def time_left(until: float) -> float:
         return until - time.monotonic() - reserve_sec
 
-    def out_of_time(until: float) -> str:
+    def out_of_time(until: float, trial_cap_sec: float = 0.0) -> str:
         """Reason to stop, or "" when another trial still fits."""
         remaining = time_left(until)
         estimate = 0.0 if settings.mock else (history.mean_trial_seconds() or DEFAULT_TRIAL_ESTIMATE_SEC)
+        # A screening run has a fixed training cap.  In particular, do not use
+        # the 45-minute cold-start estimate for a 25-minute screening trial:
+        # doing so can reject every trial near a short stage deadline even
+        # though the runner will enforce the smaller wall-clock budget.
+        if trial_cap_sec > 0:
+            estimate = min(estimate, trial_cap_sec)
         if remaining <= 0 or remaining < estimate * 1.05:
             return (
                 f"not enough time left ({remaining / 60:.1f} min < estimated trial "
@@ -412,7 +418,10 @@ def run_loop(settings: LoopSettings) -> int:
         if settings.max_trials and len(history.trials) >= settings.max_trials:
             stop_reason = f"max_trials={settings.max_trials} reached"
             break
-        reason = out_of_time(screen_deadline)
+        reason = out_of_time(
+            screen_deadline,
+            settings.screen_minutes * 60.0 if screening else 0.0,
+        )
         if reason:
             stop_reason = f"screening done: {reason}" if screening else reason
             break
