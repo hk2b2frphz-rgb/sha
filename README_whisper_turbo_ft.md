@@ -117,6 +117,16 @@ qsub -v "PROXY_URL=http://user:pass@proxy.example.com:8080,WAV_DIR=data/test_wav
 | `MODEL_DIR` (eval) | `out/whisper_turbo/ct2` | 評価するCT2モデル |
 | `WAV_DIR`/`REFS` (eval) | `data/test_wav`/なし | test wav群 / 参照TSV |
 
+## 3. ハイパラを自動で詰める
+
+学習データ (`train_manifest.jsonl`) を 1 度作ってしまえば、`README_autoresearch.md` の
+自動改善ループに投げて、CER を目的関数にハイパラ・データ拡張・復号設定を
+サーバー内で自動探索できる (1 ジョブ 20 時間、再投入で継続)。
+
+```bash
+qsub -v "WAV_DIR=data/test_wav,REFS=data/test_refs.txt" scripts/run_autoresearch.pbs
+```
+
 ## メモ
 
 - LoRA対象は attention の `q/k/v/out_proj`。DDPで unused-param エラーが出る場合は

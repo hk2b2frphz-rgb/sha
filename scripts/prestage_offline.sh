@@ -91,7 +91,30 @@ if [[ "${PRESTAGE_KOKORO:-1}" == "1" ]]; then
         "import os; from huggingface_hub import snapshot_download; print('[prestage] cached', snapshot_download(os.environ['KOKORO_MODEL']))"
 fi
 
+# The auto-research loop asks a local Gemma for the next configuration to try.
+# That runs in the separate gemma_runtime uv env, so warm it (and the model)
+# here too. Skip with PRESTAGE_GEMMA=0; the loop still runs without it, falling
+# back to evolutionary search.
+if [[ "${PRESTAGE_GEMMA:-1}" == "1" ]]; then
+    echo "===== prestage 3c/3: gemma_runtime env + proposer model ====="
+    GEMMA_MODEL="${GEMMA_MODEL:-google/gemma-4-E4B-it}"
+    echo "gemma model: $GEMMA_MODEL"
+    uv sync --project gemma_runtime
+    GEMMA_MODEL="$GEMMA_MODEL" uv run --project gemma_runtime python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+
+repo = os.environ["GEMMA_MODEL"]
+if os.path.isdir(repo):
+    print(f"[prestage] {repo} is a local dir; skip download")
+else:
+    print(f"[prestage] downloading {repo} ...")
+    print("[prestage] cached", snapshot_download(repo))
+PY
+fi
+
 echo "===== prestage done ====="
 echo "Next, on the GPU node (no network):"
 echo "  qsub -v OFFLINE=1 scripts/run_whisper_train.pbs"
+echo "  qsub -v OFFLINE=1 scripts/run_autoresearch.pbs"
 echo "  (add other overrides after a comma, e.g. -v \"OFFLINE=1,EPOCHS=8\")"

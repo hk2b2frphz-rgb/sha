@@ -6,18 +6,25 @@ import argparse
 import importlib.util
 import json
 import os
-import re
 import sys
 import time
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-JA_PUNCT_RE = re.compile(r"[\s、。．，,.!?！？「」『』（）()［］\[\]【】:：;；・…~〜\-ー_\"'“”‘’]+")
+from eval.asr_text import (  # noqa: E402  (needs the sys.path bootstrap above)
+    JA_PUNCT_RE,
+    JapaneseTokenizer,
+    edit_distance,
+    error_rate,
+    normalize_text,
+)
+
+__all__ = ["JA_PUNCT_RE", "JapaneseTokenizer", "edit_distance", "error_rate", "normalize_text"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -125,52 +132,6 @@ def load_manifest(path: Path, audio_dir: Path) -> list[dict[str, Any]]:
     if not records:
         raise SystemExit(f"manifest is empty: {path}")
     return records
-
-
-def normalize_text(text: str, *, keep_spaces: bool = False) -> str:
-    text = unicodedata.normalize("NFKC", text).lower()
-    text = JA_PUNCT_RE.sub(" " if keep_spaces else "", text)
-    return " ".join(text.split()) if keep_spaces else text.strip()
-
-
-def edit_distance(ref: list[str], hyp: list[str]) -> int:
-    prev = list(range(len(hyp) + 1))
-    for i, r in enumerate(ref, 1):
-        cur = [i]
-        for j, h in enumerate(hyp, 1):
-            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (r != h)))
-        prev = cur
-    return prev[-1]
-
-
-class JapaneseTokenizer:
-    def __init__(self, enabled: bool) -> None:
-        self.mode = "char"
-        self.tagger = None
-        if enabled:
-            try:
-                import fugashi
-
-                self.tagger = fugashi.Tagger()
-                self.mode = "fugashi"
-            except Exception:
-                self.tagger = None
-
-    def words(self, text: str) -> list[str]:
-        text = normalize_text(text, keep_spaces=True)
-        if not text:
-            return []
-        if self.tagger is not None:
-            return [word.surface for word in self.tagger(text) if word.surface.strip()]
-        if " " in text:
-            return text.split()
-        return list(normalize_text(text))
-
-
-def error_rate(ref_units: list[str], hyp_units: list[str]) -> float:
-    if not ref_units:
-        return 0.0 if not hyp_units else 1.0
-    return edit_distance(ref_units, hyp_units) / len(ref_units)
 
 
 def run_streaming(module: Any, online: Any, wav_path: str, min_chunk_size: float) -> tuple[str, float, float]:

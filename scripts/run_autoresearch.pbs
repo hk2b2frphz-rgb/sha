@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N ws_autoresearch
+#PBS -q xvn_s
+#PBS -l select=1:res=middle2
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -V
+
+# Self-improving Whisper fine-tuning loop.
+#
+# One PBS job = one search session. Inside the job the loop repeats:
+#   propose config -> LoRA fine-tune -> decode dev set -> score -> record
+# until BUDGET_HOURS is spent (default 20h of the 24h walltime), then it
+# evaluates the best adapter on the untouched holdout split and writes a report.
+#
+# State lives under WORK_DIR/state. Re-submitting the same job RESUMES: finished
+# trials are kept and the proposer continues from the existing history. That is
+# how a search longer than one walltime is run - just qsub again.
+#
+# Prerequisites (build once with run_whisper_train.pbs, which reuses its data):
+#   TRAIN_MANIFEST : out/whisper_turbo/train_manifest.jsonl  (TTS training data)
+#   WAV_DIR/REFS   : recorded test audio + reference text. Defaults point at
+#                    experiments/dataset/{wav,refs.txt}; this job turns them
+#                    into EVAL_MANIFEST. See experiments/dataset/README.md.
+#
+# Submit (this script has `#PBS -V`; pass overrides with qsub -v):
+#   qsub scripts/run_autoresearch.pbs
+#   qsub -v "WAV_DIR=data/test_wav,REFS=data/test_refs.txt" scripts/run_autoresearch.pbs
+#   qsub -v "BUDGET_HOURS=20,NUM_GPUS=4" scripts/run_autoresearch.pbs
+#   qsub -q xan_s -l select=1:res=middle -v NUM_GPUS=2 scripts/run_autoresearch.pbs
+#   # evolutionary search only (no LLM proposer):
+#   qsub -v USE_GEMMA=0 scripts/run_autoresearch.pbs
+#   # offline node (res=middle2): prestage first, then
+#   qsub -v OFFLINE=1 scripts/run_autoresearch.pbs
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+OFFLINE="${OFFLINE:-0}"
+if [[ "$OFFLINE" == "1" ]]; then
+    echo "OFFLINE=1: using prestaged .venv and HF cache (no network access)"
+    export UV_OFFLINE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+else
+    if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$PWD/scripts/setup_proxy.sh"
+    fi
+fi
+
+WORK_ROOT="${WORK_ROOT:-out/whisper_turbo}"
+WORK_DIR="${WORK_DIR:-experiments/autoresearch}"
+TRAIN_MANIFEST="${TRAIN_MANIFEST:-$WORK_ROOT/train_manifest.jsonl}"
+EVAL_MANIFEST="${EVAL_MANIFEST:-$WORK_ROOT/test_manifest.jsonl}"
+BASE_MODEL_FILE="${BASE_MODEL_FILE:-manifest.txt}"
+WAV_DIR="${WAV_DIR:-experiments/dataset/wav}"
+REFS="${REFS:-experiments/dataset/refs.txt}"
+TERMS="${TERMS:-}"
+
+NUM_GPUS="${NUM_GPUS:-4}"
+if [[ -n "${GPU_LIST:-}" ]]; then
+    CUDA_VISIBLE_DEVICES="$GPU_LIST"
+else
+    CUDA_VISIBLE_DEVICES="$(seq -s, 0 $((NUM_GPUS - 1)))"
+fi
+export CUDA_VISIBLE_DEVICES
+
+BUDGET_HOURS="${BUDGET_HOURS:-20}"
+RESERVE_MINUTES="${RESERVE_MINUTES:-40}"
+MAX_TRIAL_HOURS="${MAX_TRIAL_HOURS:-6}"
+MAX_TRIALS="${MAX_TRIALS:-0}"
+MAX_CONSECUTIVE_FAILURES="${MAX_CONSECUTIVE_FAILURES:-5}"
+OBJECTIVE="${OBJECTIVE:-cer}"
+TERM_WEIGHT="${TERM_WEIGHT:-0.5}"
+DEV_RATIO="${DEV_RATIO:-0.5}"
+SEED="${SEED:-42}"
+N_RANDOM="${N_RANDOM:-4}"
+ELITE_K="${ELITE_K:-4}"
+KEEP_ADAPTERS="${KEEP_ADAPTERS:-3}"
+# Two-stage search: screen many configs with SCREEN_MINUTES of training each,
+# then re-run the best FINALISTS at full length. SCREEN_MINUTES=0 disables it.
+SCREEN_MINUTES="${SCREEN_MINUTES:-25}"
+SCREEN_BUDGET_FRACTION="${SCREEN_BUDGET_FRACTION:-0.6}"
+FINALISTS="${FINALISTS:-3}"
+GUIDANCE="${GUIDANCE:-PROPOSER_GUIDANCE.md}"
+# Mid-training abort: decode a slice of dev each epoch and give up on a trial
+# that is clearly worse than the best so far. EARLY_STOP_MARGIN=0 disables it.
+EARLY_STOP_MARGIN="${EARLY_STOP_MARGIN:-0.35}"
+EARLY_STOP_PATIENCE="${EARLY_STOP_PATIENCE:-2}"
+EARLY_STOP_DEV_LIMIT="${EARLY_STOP_DEV_LIMIT:-24}"
+EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-8}"
+LANGUAGE="${LANGUAGE:-ja}"
+USE_GEMMA="${USE_GEMMA:-1}"
+GEMMA_MODEL="${GEMMA_MODEL:-google/gemma-4-E4B-it}"
+GEMMA_PROPOSALS="${GEMMA_PROPOSALS:-3}"
+GEMMA_TIMEOUT_SEC="${GEMMA_TIMEOUT_SEC:-900}"
+# WRITE_ANALYSIS=1: after the search, Gemma writes a discussion section into
+# report.md (which knobs mattered, what to try next). Set 0 to skip it.
+WRITE_ANALYSIS="${WRITE_ANALYSIS:-1}"
+FINAL_EXPORT="${FINAL_EXPORT:-1}"
+CT2_QUANT="${CT2_QUANT:-float16}"
+
+mkdir -p logs experiments/pbs_logs "$WORK_DIR"
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/ws_autoresearch_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+echo "===== whisper auto-research loop ====="
+echo "host:            $(hostname)"
+echo "work_dir:        $WORK_DIR"
+echo "train_manifest:  $TRAIN_MANIFEST"
+echo "eval_manifest:   $EVAL_MANIFEST"
+echo "base_model_file: $BASE_MODEL_FILE"
+echo "gpus:            $CUDA_VISIBLE_DEVICES (num_gpus=$NUM_GPUS)"
+echo "budget:          ${BUDGET_HOURS}h (reserve ${RESERVE_MINUTES}min, max ${MAX_TRIAL_HOURS}h/trial)"
+echo "objective:       $OBJECTIVE"
+echo "screening:       ${SCREEN_MINUTES}min/trial, finalists=$FINALISTS"
+echo "proposer:        gemma=$USE_GEMMA ($GEMMA_MODEL)"
+echo "started_at:      $(date -Iseconds)"
+echo "======================================"
+
+command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
+
+if [[ ! -s "$TRAIN_MANIFEST" ]]; then
+    echo "ERROR: training manifest not found: $TRAIN_MANIFEST" >&2
+    echo "Build it once with: qsub scripts/run_whisper_train.pbs" >&2
+    exit 1
+fi
+
+if [[ "$OFFLINE" == "1" ]]; then
+    uv sync --offline
+else
+    export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
+    export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-60}"
+    uv sync -v
+fi
+
+# Build the evaluation manifest from recorded wavs when it does not exist yet.
+if [[ ! -s "$EVAL_MANIFEST" ]]; then
+    if [[ -z "$WAV_DIR" ]]; then
+        echo "ERROR: $EVAL_MANIFEST is missing and WAV_DIR was not given." >&2
+        echo "Pass WAV_DIR (and REFS) so the job can build the test manifest." >&2
+        exit 1
+    fi
+    [[ -d "$WAV_DIR" ]] || { echo "ERROR: WAV_DIR does not exist: $WAV_DIR" >&2; exit 1; }
+    # References are not optional here: the search is scored on CER, so a
+    # manifest without reference text would optimize against nothing.
+    if [[ -z "$REFS" || ! -s "$REFS" ]]; then
+        echo "ERROR: reference text file not found: ${REFS:-<unset>}" >&2
+        echo "Place it next to the wavs (see experiments/dataset/README.md) or pass REFS=..." >&2
+        exit 1
+    fi
+    echo "===== building evaluation manifest from $WAV_DIR ====="
+    uv run python scripts/build_test_manifest.py \
+        --wav-dir "$WAV_DIR" --references "$REFS" --out "$EVAL_MANIFEST"
+fi
+test -s "$EVAL_MANIFEST"
+
+loop_args=(
+    --train-manifest "$TRAIN_MANIFEST"
+    --eval-manifest "$EVAL_MANIFEST"
+    --work-dir "$WORK_DIR"
+    --base-model-file "$BASE_MODEL_FILE"
+    --language "$LANGUAGE"
+    --num-gpus "$NUM_GPUS"
+    --eval-batch-size "$EVAL_BATCH_SIZE"
+    --budget-hours "$BUDGET_HOURS"
+    --reserve-minutes "$RESERVE_MINUTES"
+    --max-trial-hours "$MAX_TRIAL_HOURS"
+    --max-trials "$MAX_TRIALS"
+    --max-consecutive-failures "$MAX_CONSECUTIVE_FAILURES"
+    --objective "$OBJECTIVE"
+    --term-weight "$TERM_WEIGHT"
+    --dev-ratio "$DEV_RATIO"
+    --seed "$SEED"
+    --n-random "$N_RANDOM"
+    --elite-k "$ELITE_K"
+    --keep-adapters "$KEEP_ADAPTERS"
+    --screen-minutes "$SCREEN_MINUTES"
+    --screen-budget-fraction "$SCREEN_BUDGET_FRACTION"
+    --finalists "$FINALISTS"
+    --early-stop-margin "$EARLY_STOP_MARGIN"
+    --early-stop-patience "$EARLY_STOP_PATIENCE"
+    --early-stop-dev-limit "$EARLY_STOP_DEV_LIMIT"
+    --gemma-model "$GEMMA_MODEL"
+    --gemma-proposals "$GEMMA_PROPOSALS"
+    --gemma-timeout-sec "$GEMMA_TIMEOUT_SEC"
+    --ct2-quantization "$CT2_QUANT"
+)
+[[ -n "$TERMS" ]] && loop_args+=(--terms "$TERMS")
+[[ -n "$GUIDANCE" && -s "$GUIDANCE" ]] && loop_args+=(--guidance "$GUIDANCE")
+[[ "$USE_GEMMA" == "0" ]] && loop_args+=(--no-gemma)
+[[ "$WRITE_ANALYSIS" == "0" ]] && loop_args+=(--no-analysis)
+[[ "$FINAL_EXPORT" == "1" ]] && loop_args+=(--final-export)
+
+echo "===== starting search loop ====="
+uv run python scripts/run_autoresearch.py "${loop_args[@]}"
+
+echo "===== done ====="
+echo "report:       $WORK_DIR/report.md"
+echo "state:        $WORK_DIR/state/state.json"
+echo "best config:  $WORK_DIR/best_config.json"
+echo "ct2 model:    $WORK_DIR/final/ct2 (when FINAL_EXPORT=1)"
+echo "resume with:  qsub scripts/run_autoresearch.pbs   (same WORK_DIR)"
+echo "finished_at:  $(date -Iseconds)"
