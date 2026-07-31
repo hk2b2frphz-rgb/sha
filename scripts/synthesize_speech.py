@@ -37,7 +37,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--language", default="Japanese")
     parser.add_argument("--instruct", default=None, help="話し方のスタイル指示 (省略可)")
     parser.add_argument("--lead-silence-ms", type=int, default=0, help="WAV先頭に付与する無音（ミリ秒）")
-    parser.add_argument("--prepend-pause", action="store_true", help="合成時だけ文頭に読点を付ける")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--dtype", choices=["bfloat16", "float16", "float32"], default="bfloat16")
     return parser.parse_args()
@@ -99,11 +98,6 @@ def add_lead_silence(audio: np.ndarray, sample_rate: int, milliseconds: int) -> 
     return np.concatenate((np.zeros(samples, dtype=np.float32), audio.astype(np.float32, copy=False)))
 
 
-def prepare_tts_text(text: str, prepend_pause: bool) -> str:
-    """Give the model a pause token before the first phoneme without changing the transcript."""
-    return f"、{text}" if prepend_pause else text
-
-
 def main() -> None:
     args = parse_args()
     records = load_sentences(args.sentences)
@@ -122,7 +116,7 @@ def main() -> None:
         for i, rec in enumerate(records, 1):
             # annotate_readings.py で付与した tts_text があればそちらを使う
             text = rec.get("tts_text") or rec["sentence"]
-            audio, sr = synthesize(model, args, prepare_tts_text(text, args.prepend_pause))
+            audio, sr = synthesize(model, args, text)
             audio = add_lead_silence(audio, sr, args.lead_silence_ms)
             wav_path = wav_dir / f"{rec['id']}.wav"
             sf.write(wav_path, audio, sr, subtype="PCM_16")

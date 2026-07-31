@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #PBS -S /bin/bash
-#PBS -N ws_autoresearch
+#PBS -N STDIN
 #PBS -q xan_i
 #PBS -l select=1:res=small
 #PBS -l walltime=24:00:00

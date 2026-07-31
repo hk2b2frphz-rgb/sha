@@ -34,8 +34,8 @@ python -m experiments.run_method_comparison --no-install
 
 The script evaluates all available resolvers over:
 
-- `data/benchmark_terms.tsv` as `medical`
-- `data/benchmark_terms_sewage_60.tsv` as `sewage`
+- `data/benchmark_terms.tsv` as `domain-A`
+- `data/benchmark_terms_sewage_60.tsv` as `domain-B`
 - `data/test_cases.tsv` as `general`
 
 Saved LLM resolvers read `experiments/*_neweval.json` and use `llm_output`
@@ -60,7 +60,7 @@ This repository requires Python 3.11+ per `pyproject.toml`. In the current
 workspace, the visible system `python` is 3.6; use a Python 3.11+ environment
 or another compatible interpreter on PATH.
 
-## Sewage Benchmark Expansion To 60 Items
+## Domain-B Benchmark Expansion To 60 Items
 
 Use `data/benchmark_terms_sewage_60_template.tsv` as the curation worksheet.
 The template intentionally leaves `term` and `reading` blank. Fill readings only
@@ -70,7 +70,7 @@ future resolver being evaluated; that would make the gold set circular.
 
 Recommended curation workflow:
 
-1. Add sewage-domain terms to the `term` column.
+1. Add domain-B terms to the `term` column.
 2. Enter one or more acceptable hiragana readings in `reading`, separated by
    `|` when multiple readings are truly valid.
 3. Record the human reviewer or authority in `source`.
@@ -107,7 +107,7 @@ Confirm `dictionary_status` in `experiments/comparison_results.json` shows
 python -m pytest tests
 ```
 
-## 下水道60語ベンチをGPUで再評価する手順
+## 分野B 60語ベンチをGPUで再評価する手順
 
 Linux GPU server上で、リポジトリのルートから次を実行します。Gemmaの推論は
 `gemma_runtime` の `uv` 環境を使い、比較スクリプトは現在のPython環境に

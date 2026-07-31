@@ -29,11 +29,6 @@ the first phoneme from being clipped during playback or streaming evaluation.
 Override it with `LEAD_SILENCE_MS`, for example `LEAD_SILENCE_MS=0` to disable
 the padding.
 
-`PREPEND_PAUSE=1` is also enabled by default. It prepends a Japanese comma only
-to the text sent into the TTS model, causing the model to generate its own
-pre-roll before the first phoneme. The comma is not saved in the reference text
-or output manifest. Set `PREPEND_PAUSE=0` to disable it.
-
 The default Kokoro voice is the neutral Japanese female voice `jf_alpha`:
 
 ```bash

@@ -4,7 +4,7 @@
 
 入力:  1 行 1 用語のテキストファイル (--terms)
 出力:  JSONL (--out)。1 行 = 1 例文:
-       {"id": "0001", "term": "心筋梗塞", "sentence": "...", "tts_text": "..."}
+       {"id": "0001", "term": "深層学習", "sentence": "...", "tts_text": "..."}
        sentence  : 漢字を含む元の文（ASR 正解テキスト）
        tts_text  : 専門用語をひらがなに置換した文（TTS 入力用）
 

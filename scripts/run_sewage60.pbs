@@ -1,5 +1,5 @@
 #!/bin/bash
-# PBS job: sewage 60-term reading benchmark — Gemma E4B/E2B inference + method comparison.
+# PBS job: domain-B 60-term reading benchmark — Gemma E4B/E2B inference + method comparison.
 #
 # What it does (one shot):
 #   1. install pyopenjtalk + dict/eval deps into the gemma_runtime uv env
@@ -20,7 +20,7 @@
 # Logs: logs/  (stdout+stderr merged)
 #
 # NOTE: adjust the resource line (-l) and queue (-q) to match the cluster.
-#PBS -N sewage60_eval
+#PBS -N STDIN
 #PBS -l select=1:ncpus=8:ngpus=1:mem=64gb
 #PBS -l walltime=06:00:00
 #PBS -j oe

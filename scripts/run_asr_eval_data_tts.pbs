@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #PBS -S /bin/bash
-#PBS -N ws_eval_tts
+#PBS -N STDIN
 #PBS -q xvn_s
 #PBS -l select=1:res=small
 #PBS -l walltime=04:00:00
@@ -38,7 +38,6 @@ KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
 KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
 KOKORO_SPEED="${KOKORO_SPEED:-1.0}"
 LEAD_SILENCE_MS="${LEAD_SILENCE_MS:-500}"
-PREPEND_PAUSE="${PREPEND_PAUSE:-1}"
 CLEAN_WAV_DIR="${CLEAN_WAV_DIR:-1}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export CUDA_VISIBLE_DEVICES
@@ -57,7 +56,6 @@ echo "eval_jsonl:    $EVAL_JSONL"
 echo "out_dir:       $OUT_DIR"
 echo "tts_backend:   $TTS_BACKEND"
 echo "lead_silence:  ${LEAD_SILENCE_MS}ms"
-echo "prepend_pause: $PREPEND_PAUSE"
 echo "clean_wav_dir: $CLEAN_WAV_DIR"
 if [[ "$TTS_BACKEND" == "kokoro" ]]; then
     echo "kokoro_model:  $KOKORO_MODEL"
@@ -81,10 +79,6 @@ if [[ "$TTS_BACKEND" != "qwen3" && "$TTS_BACKEND" != "kokoro" ]]; then
 fi
 if ! [[ "$LEAD_SILENCE_MS" =~ ^[0-9]+$ ]]; then
     echo "ERROR: LEAD_SILENCE_MS must be a non-negative integer: $LEAD_SILENCE_MS" >&2
-    exit 1
-fi
-if [[ "$PREPEND_PAUSE" != "0" && "$PREPEND_PAUSE" != "1" ]]; then
-    echo "ERROR: PREPEND_PAUSE must be 0 or 1: $PREPEND_PAUSE" >&2
     exit 1
 fi
 if [[ "$CLEAN_WAV_DIR" == "1" ]]; then
@@ -122,27 +116,23 @@ if [[ "$TTS_BACKEND" == "kokoro" ]]; then
         --with "torchaudio==$TORCHAUDIO_VERSION"
     )
     "${KOKORO_UV[@]}" python -m unidic download
-    synth_args=("${KOKORO_UV[@]}" python scripts/synthesize_speech_kokoro.py \
+    "${KOKORO_UV[@]}" python scripts/synthesize_speech_kokoro.py \
         --sentences "$EVAL_JSONL" \
         --out-dir "$OUT_DIR" \
         --model-id "$KOKORO_MODEL" \
         --voice "$KOKORO_VOICE" \
         --speed "$KOKORO_SPEED" \
         --lead-silence-ms "$LEAD_SILENCE_MS" \
-        --device "cuda")
-    if [[ "$PREPEND_PAUSE" == "1" ]]; then synth_args+=(--prepend-pause); fi
-    "${synth_args[@]}"
+        --device "cuda"
 else
-    synth_args=(uv run python scripts/synthesize_speech.py \
+    uv run python scripts/synthesize_speech.py \
         --sentences "$EVAL_JSONL" \
         --out-dir "$OUT_DIR" \
         --model "$TTS_MODEL" \
         --speaker "$TTS_SPEAKER" \
         --device "$TTS_DEVICE" \
         --dtype "$TTS_DTYPE" \
-        --lead-silence-ms "$LEAD_SILENCE_MS")
-    if [[ "$PREPEND_PAUSE" == "1" ]]; then synth_args+=(--prepend-pause); fi
-    "${synth_args[@]}"
+        --lead-silence-ms "$LEAD_SILENCE_MS"
 fi
 
 echo "manifest: $OUT_DIR/manifest.jsonl"

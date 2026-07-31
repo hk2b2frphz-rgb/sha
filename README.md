@@ -108,5 +108,5 @@ NG がある場合は全出力をコピーして共有する。
 `out/audio/manifest.jsonl` (1 行 1 音声):
 
 ```json
-{"id": "0001", "term": "心筋梗塞", "sentence": "祖父が心筋梗塞で入院したと連絡があった。", "wav": "wav/0001.wav", "duration_sec": 3.42, "speaker": "Vivian"}
+{"id": "0001", "term": "深層学習", "sentence": "深層学習の研究発表を聴講した。", "wav": "wav/0001.wav", "duration_sec": 3.42, "speaker": "Vivian"}
 ```

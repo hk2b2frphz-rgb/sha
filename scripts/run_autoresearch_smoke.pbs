@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #PBS -S /bin/bash
-#PBS -N ws_autoresearch_smoke
+#PBS -N STDIN
 #PBS -q xvn_s
 #PBS -l select=1:res=middle2
 #PBS -l walltime=03:00:00

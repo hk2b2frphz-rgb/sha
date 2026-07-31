@@ -98,7 +98,7 @@ class SmartHybridResolver(Resolver):
     This resolver keeps the strongest saved LLM as the default path, then
     routes to dictionary readings only when prediction-side evidence suggests
     that the dictionary is more reliable: non-OOV output, kana consistency,
-    multiple dictionary agreement, and a small domain-lexeme boost for sewage
+    multiple dictionary agreement, and a small domain-lexeme boost for domain-B
     terminology where saved LLMs often devoice or hallucinate readings.
     """
 

@@ -305,7 +305,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=0.0, help="0 uses greedy decode")
     parser.add_argument("--max-new-tokens", type=int, default=64)
     parser.add_argument("--batch-size", type=int, default=10, help="Azure OpenAI/GPT cases per request")
-    parser.add_argument("--domain", help="Filter evaluation domain, e.g. medical, sewage, it, engineering")
+    parser.add_argument("--domain", help="Filter evaluation domain, e.g. domain-a, domain-b, it, engineering")
     parser.add_argument("--out", type=Path, help="Output JSON path")
     parser.add_argument("--dry-run", action="store_true", help="Check data and evaluation logic without LLM calls")
     parser.add_argument("--skip-if-no-key", action="store_true", help="Exit 0 when API keys are missing")
