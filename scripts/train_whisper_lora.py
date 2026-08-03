@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""whisper-large-v3-turbo を LoRA で fine-tune する (HF transformers + peft)。
+"""whisper-large-v3-turbo を fine-tune する (HF transformers + peft)。
+
+--finetune-mode で 2 方式を選ぶ:
+  lora  LoRA/PEFT アダプタだけを学習 (既定)
+  full  重みを直接学習。既定で **encoder は凍結**し decoder だけ動かす
+
+encoder 凍結の full-FT を用意しているのは、この学習データが TTS 合成音声だから。
+encoder まで動かすと合成音の音響特性に過適合して実音声で崩れる一方、decoder だけ
+なら「音は同じ・表記だけ専門用語に寄せる」という本来の狙いに合う。
 
 入力は build_whisper_manifest.py が出す学習 manifest JSONL:
   {"id", "audio", "text", "duration_sec"}
@@ -7,10 +15,12 @@
 ベースモデルのパスは manifest.txt (1行1パス、先頭の非コメント行) から読む。
 HPC 上ではこの manifest.txt を編集してローカルの重みを指す。
 
-出力:
+出力 (lora):
   <out-dir>/adapter/            LoRA アダプタ + processor
   <merge-dir> (任意)            base に adapter をマージした HF形式モデル
-                                -> PBS 側で ct2-transformers-converter に渡す
+出力 (full):
+  <merge-dir> か <out-dir>/model/   学習済み HF形式モデル + processor
+いずれも -> PBS 側で ct2-transformers-converter に渡す。
 
 複数GPU (V100×4) では accelerate launch / torchrun 経由で DDP 実行する。
 """
@@ -29,8 +39,112 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from eval.asr_text import error_rate, normalize_text  # noqa: E402  (sys.path bootstrap above)
 
 
+# 学習方式ごとの既定学習率。full-FT は重みを直接動かすので LoRA より 1 桁小さくする
+# (Whisper large 系の目安は事前学習の 1/40 = 5e-6〜1e-5)。
+FINETUNE_MODES = ("lora", "full")
+DEFAULT_LR = {"lora": 1e-4, "full": 1e-5}
+MIXED_PRECISION_MODES = ("auto", "fp16", "bf16")
+
+
+def resolve_learning_rate(mode: str, lr: float | None) -> float:
+    """--lr 明示があればそれ、無ければ方式ごとの既定値。"""
+    return float(lr) if lr is not None else DEFAULT_LR[mode]
+
+
+def resolve_freeze_encoder(mode: str, flag: bool | None) -> bool:
+    """encoder を凍結するか。full は既定で凍結、lora は常に対象外。"""
+    if mode == "lora":
+        if flag:
+            raise SystemExit(
+                "--freeze-encoder は --finetune-mode full 用です "
+                "(lora ではベース重みが元から全て凍結されています)"
+            )
+        return False
+    return True if flag is None else bool(flag)
+
+
+def count_parameters(model: Any) -> tuple[int, int]:
+    """(学習対象パラメータ数, 全パラメータ数)。"""
+    trainable = 0
+    total = 0
+    for param in model.parameters():
+        n = int(param.numel())
+        total += n
+        if param.requires_grad:
+            trainable += n
+    return trainable, total
+
+
+def freeze_encoder(model: Any) -> None:
+    """encoder の全パラメータを requires_grad=False にする。
+
+    encoder は train モードのままにしておく。SpecAugment と dropout は
+    self.training を見て掛かるので、凍結後も decoder 側から見た入力の
+    揺らぎとして効き、正則化になる。
+    """
+    for param in model.get_encoder().parameters():
+        param.requires_grad = False
+
+
+def verify_encoder_frozen(model: Any) -> int:
+    """encoder が完全に凍結されていることを検証し、パラメータ数を返す。"""
+    params = list(model.get_encoder().parameters())
+    if not params:
+        raise RuntimeError("Whisper encoder has no parameters; refusing decoder-only fine-tuning")
+    trainable = [param for param in params if param.requires_grad]
+    if trainable:
+        trainable_count = sum(int(param.numel()) for param in trainable)
+        raise RuntimeError(
+            "decoder-only fine-tuning requires a fully frozen encoder, but "
+            f"{len(trainable)} tensors ({trainable_count:,} parameters) are still trainable"
+        )
+    return sum(int(param.numel()) for param in params)
+
+
+def truncate_label_ids(input_ids: list[int], max_length: int, eos_token_id: int | None) -> list[int]:
+    """ラベルを切り詰める。切詰め時も末尾の EOT/EOS は必ず残す。"""
+    if max_length <= 0:
+        raise ValueError("max_length must be positive")
+    ids = list(input_ids)
+    if len(ids) <= max_length:
+        return ids
+    truncated = ids[:max_length]
+    if eos_token_id is None:
+        raise ValueError("eos_token_id is required when labels are truncated")
+    truncated[-1] = int(eos_token_id)
+    return truncated
+
+
+def resolve_mixed_precision(
+    mode: str,
+    *,
+    cuda_available: bool,
+    bf16_supported: bool,
+) -> tuple[bool, bool]:
+    """``(fp16, bf16)`` を返す。auto は対応 GPU なら bf16 を優先する。"""
+    if mode not in MIXED_PRECISION_MODES:
+        raise ValueError(f"unsupported mixed precision mode: {mode}")
+    if mode == "auto":
+        if not cuda_available:
+            return False, False
+        return (False, True) if bf16_supported else (True, False)
+    if not cuda_available:
+        raise SystemExit(f"--mixed-precision {mode} requires CUDA")
+    if mode == "bf16" and not bf16_supported:
+        raise SystemExit("--mixed-precision bf16 is not supported by this CUDA device/runtime")
+    return mode == "fp16", mode == "bf16"
+
+
+def resolve_checkpoint_policy(has_dev: bool, requested_save_strategy: str) -> tuple[str, str, bool]:
+    """``(eval_strategy, save_strategy, load_best_model_at_end)`` を返す。"""
+    if has_dev:
+        # transformers は best model 復元時に eval/save strategy の一致を要求する。
+        return "epoch", "epoch", True
+    return "no", requested_save_strategy, False
+
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="whisper-large-v3-turbo LoRA fine-tune")
+    parser = argparse.ArgumentParser(description="whisper-large-v3-turbo fine-tune (LoRA / full)")
     parser.add_argument("--manifest", type=Path, required=True, help="学習 manifest JSONL")
     parser.add_argument("--base-model", type=str, default=None, help="ベースモデルのパス/HF id (直接指定)")
     parser.add_argument(
@@ -43,10 +157,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--merge-dir", type=Path, default=None, help="マージ済みHFモデルの保存先 (任意)")
     parser.add_argument("--language", default="ja")
     parser.add_argument("--task", default="transcribe")
+    parser.add_argument(
+        "--finetune-mode",
+        default="lora",
+        choices=list(FINETUNE_MODES),
+        help="lora=アダプタのみ / full=重みを直接学習 (既定で encoder 凍結)",
+    )
+    parser.add_argument(
+        "--freeze-encoder",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="full-FT で encoder を凍結する (既定: 凍結)。--no-freeze-encoder で全層学習",
+    )
     parser.add_argument("--epochs", type=float, default=5.0)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help=f"学習率 (既定は方式依存: lora={DEFAULT_LR['lora']:g}, full={DEFAULT_LR['full']:g})",
+    )
     parser.add_argument("--batch-size", type=int, default=8, help="per-device train batch size")
     parser.add_argument("--grad-accum", type=int, default=1)
+    parser.add_argument(
+        "--mixed-precision",
+        default="auto",
+        choices=list(MIXED_PRECISION_MODES),
+        help="auto=GPUに応じてbf16/fp16を選択、または fp16 / bf16 を明示",
+    )
     parser.add_argument("--warmup-ratio", type=float, default=0.1)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--label-smoothing", type=float, default=0.0)
@@ -251,10 +388,13 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 def main() -> None:
     args = parse_args()
 
+    mode = str(args.finetune_mode)
+    freeze_enc = resolve_freeze_encoder(mode, args.freeze_encoder)
+    learning_rate = resolve_learning_rate(mode, args.lr)
+
     import numpy as np
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, get_peft_model
     from transformers import (
         Seq2SeqTrainer,
         Seq2SeqTrainingArguments,
@@ -265,6 +405,7 @@ def main() -> None:
 
     base_model = resolve_base_model(args)
     print(f"[train] base model: {base_model}")
+    print(f"[train] finetune mode: {mode} (lr={learning_rate:g})")
 
     processor = WhisperProcessor.from_pretrained(base_model, language=args.language, task=args.task)
 
@@ -311,7 +452,11 @@ def main() -> None:
         batch["input_features"] = feature_extractor(
             wav, sampling_rate=16000
         ).input_features[0]
-        batch["labels"] = tokenizer(batch["text"]).input_ids[:max_label_len]
+        batch["labels"] = truncate_label_ids(
+            tokenizer(batch["text"]).input_ids,
+            max_label_len,
+            tokenizer.eos_token_id,
+        )
         return batch
 
     dataset = dataset.map(prepare, remove_columns=dataset.column_names, num_proc=1)
@@ -333,7 +478,6 @@ def main() -> None:
     model.generation_config.task = args.task
     model.generation_config.forced_decoder_ids = None
     model.config.forced_decoder_ids = None
-    model.config.suppress_tokens = []
     # 学習中は gradient checkpointing と両立しないので KV キャッシュを切るが、
     # 学習中 dev 評価の generate ではキャッシュを使わないと極端に遅くなる。
     model.config.use_cache = False
@@ -346,20 +490,33 @@ def main() -> None:
         print(
             f"[train] SpecAugment on (time={args.mask_time_prob}, feature={args.mask_feature_prob})"
         )
-    # gradient checkpointing + PEFT の勾配伝播のため入力に requires_grad を立てる。
-    model.enable_input_require_grads()
+    if mode == "lora":
+        from peft import LoraConfig, get_peft_model
 
-    target_modules = [m.strip() for m in args.target_modules.split(",") if m.strip()]
-    print(f"[train] LoRA target modules: {target_modules}")
-    lora_config = LoraConfig(
-        r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        target_modules=target_modules,
-        lora_dropout=args.lora_dropout,
-        bias="none",
-    )
-    model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()
+        # 凍結ベースへ gradient checkpointing 越しに勾配を渡すため、LoRA のみ必要。
+        model.enable_input_require_grads()
+        target_modules = [m.strip() for m in args.target_modules.split(",") if m.strip()]
+        print(f"[train] LoRA target modules: {target_modules}")
+        lora_config = LoraConfig(
+            r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            target_modules=target_modules,
+            lora_dropout=args.lora_dropout,
+            bias="none",
+        )
+        model = get_peft_model(model, lora_config)
+        model.print_trainable_parameters()
+    else:
+        if freeze_enc:
+            freeze_encoder(model)
+            frozen_encoder_params = verify_encoder_frozen(model)
+            print(f"[train] verified frozen encoder: {frozen_encoder_params:,} parameters")
+        trainable_params, total_params = count_parameters(model)
+        print(
+            f"[train] full fine-tune (encoder {'frozen' if freeze_enc else 'trainable'}): "
+            f"trainable params: {trainable_params:,} || all params: {total_params:,} || "
+            f"trainable%: {100.0 * trainable_params / max(1, total_params):.4f}"
+        )
 
     collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
 
@@ -420,27 +577,52 @@ def main() -> None:
             return control
 
     adapter_dir = args.out_dir / "adapter"
+    cuda_available = bool(torch.cuda.is_available())
+    bf16_supported = bool(
+        cuda_available
+        and hasattr(torch.cuda, "is_bf16_supported")
+        and torch.cuda.is_bf16_supported()
+    )
+    use_fp16, use_bf16 = resolve_mixed_precision(
+        args.mixed_precision,
+        cuda_available=cuda_available,
+        bf16_supported=bf16_supported,
+    )
+    print(
+        "[train] mixed precision: "
+        + ("bf16" if use_bf16 else "fp16" if use_fp16 else "disabled")
+    )
+    has_dev = eval_dataset is not None
+    eval_strategy, effective_save_strategy, load_best_model = resolve_checkpoint_policy(
+        has_dev, args.save_strategy
+    )
+    if has_dev and args.save_strategy != "epoch":
+        print("[train] dev evaluation requires epoch checkpoints; overriding --save-strategy to epoch")
     training_args = Seq2SeqTrainingArguments(
         output_dir=str(args.out_dir / "trainer"),
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
-        learning_rate=args.lr,
+        learning_rate=learning_rate,
         warmup_ratio=args.warmup_ratio,
         weight_decay=args.weight_decay,
         label_smoothing_factor=args.label_smoothing,
         lr_scheduler_type=args.lr_scheduler,
         num_train_epochs=args.epochs,
         gradient_checkpointing=True,
-        fp16=torch.cuda.is_available(),
+        fp16=use_fp16,
+        bf16=use_bf16,
         logging_steps=10,
-        save_strategy=args.save_strategy,
+        save_strategy=effective_save_strategy,
         save_total_limit=1,
+        load_best_model_at_end=load_best_model,
+        metric_for_best_model="cer" if has_dev else None,
+        greater_is_better=False if has_dev else None,
         report_to=[],
         remove_unused_columns=False,
         label_names=["labels"],
         ddp_find_unused_parameters=False,
         seed=args.seed,
-        eval_strategy="epoch" if eval_dataset is not None else "no",
+        eval_strategy=eval_strategy,
         per_device_eval_batch_size=max(1, args.batch_size // 2),
         predict_with_generate=eval_dataset is not None,
         generation_max_length=args.max_label_len,
@@ -463,6 +645,11 @@ def main() -> None:
         trainer.add_callback(time_budget)
         print(f"[train] wall-clock training budget: {args.max_train_seconds:.0f}s")
     trainer.train()
+    if has_dev and trainer.state.best_model_checkpoint:
+        print(
+            "[train] restored best dev-CER checkpoint: "
+            f"{trainer.state.best_model_checkpoint} (CER={trainer.state.best_metric})"
+        )
 
     if trainer.is_world_process_zero():
         # 探索ループはこのファイルを読んで、試行が早期打ち切りされたかを記録する。
@@ -470,8 +657,14 @@ def main() -> None:
         progress_path.write_text(
             json.dumps(
                 {
+                    "finetune_mode": mode,
+                    "freeze_encoder": freeze_enc,
+                    "learning_rate": learning_rate,
+                    "mixed_precision": "bf16" if use_bf16 else "fp16" if use_fp16 else "disabled",
                     "dev_cer_curve": policy.history,
                     "best_dev_cer": policy.best,
+                    "best_model_checkpoint": trainer.state.best_model_checkpoint,
+                    "best_model_metric": trainer.state.best_metric,
                     "early_stopped": bool(stop_reason),
                     "early_stop_reason": stop_reason,
                     "epochs_requested": args.epochs,
@@ -487,26 +680,35 @@ def main() -> None:
             encoding="utf-8",
         )
 
-        model.save_pretrained(adapter_dir)
-        processor.save_pretrained(adapter_dir)
-        print(f"[train] saved adapter -> {adapter_dir}")
+        if mode == "lora":
+            model.save_pretrained(adapter_dir)
+            processor.save_pretrained(adapter_dir)
+            print(f"[train] saved adapter -> {adapter_dir}")
 
-        if args.merge_dir is not None:
-            from peft import PeftModel
+            if args.merge_dir is not None:
+                from peft import PeftModel
 
-            print("[train] merging LoRA adapter into base ...")
-            base = WhisperForConditionalGeneration.from_pretrained(base_model)
-            base.generation_config.language = args.language
-            base.generation_config.task = args.task
-            base.generation_config.forced_decoder_ids = None
-            base.config.forced_decoder_ids = None
-            base.config.suppress_tokens = []
-            merged = PeftModel.from_pretrained(base, str(adapter_dir))
-            merged = merged.merge_and_unload()
-            args.merge_dir.mkdir(parents=True, exist_ok=True)
-            merged.save_pretrained(args.merge_dir)
-            processor.save_pretrained(args.merge_dir)
-            print(f"[train] saved merged model -> {args.merge_dir}")
+                print("[train] merging LoRA adapter into base ...")
+                base = WhisperForConditionalGeneration.from_pretrained(base_model)
+                base.generation_config.language = args.language
+                base.generation_config.task = args.task
+                base.generation_config.forced_decoder_ids = None
+                base.config.forced_decoder_ids = None
+                merged = PeftModel.from_pretrained(base, str(adapter_dir))
+                merged = merged.merge_and_unload()
+                args.merge_dir.mkdir(parents=True, exist_ok=True)
+                merged.save_pretrained(args.merge_dir)
+                processor.save_pretrained(args.merge_dir)
+                print(f"[train] saved merged model -> {args.merge_dir}")
+        else:
+            # full-FT の出力はそれ自体がマージ済みモデル。3GB級なので二重に置かず、
+            # --merge-dir があればそこへ、無ければ <out-dir>/model へ 1 部だけ保存する。
+            model.config.use_cache = True
+            model_dir = args.merge_dir if args.merge_dir is not None else args.out_dir / "model"
+            model_dir.mkdir(parents=True, exist_ok=True)
+            model.save_pretrained(model_dir)
+            processor.save_pretrained(model_dir)
+            print(f"[train] saved fine-tuned model -> {model_dir}")
 
 
 if __name__ == "__main__":

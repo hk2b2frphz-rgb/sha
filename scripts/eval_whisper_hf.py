@@ -2,8 +2,9 @@
 """Fast batched Whisper evaluation with HF transformers (no CT2 / no streaming).
 
 Used as the inner-loop evaluator of the auto-research loop: it scores a LoRA
-adapter directly on top of the base model, so a trial never has to merge
-weights or convert to CTranslate2. Metrics come from `eval/asr_text.py`, the
+adapter directly on top of the base model (`--adapter`), so a trial never has
+to merge weights or convert to CTranslate2. A full fine-tune writes a complete
+model instead, which is scored with `--model-dir`. Metrics come from `eval/asr_text.py`, the
 same code `evaluate_whisper_streaming.py` uses, so the numbers stay comparable
 with the existing whisper-streaming reports (decoding policy still differs:
 this is offline batched decoding, not the streaming policy).
@@ -48,6 +49,12 @@ def parse_args() -> argparse.Namespace:
         help="txt holding BASE_MODEL= (used when --base-model is omitted)",
     )
     parser.add_argument("--adapter", type=Path, default=None, help="LoRA adapter dir (optional)")
+    parser.add_argument(
+        "--model-dir",
+        type=Path,
+        default=None,
+        help="fine-tuned HF model dir (full-FT output; replaces the base model)",
+    )
     parser.add_argument("--language", default="ja")
     parser.add_argument("--task", default="transcribe")
     parser.add_argument("--batch-size", type=int, default=8)
@@ -135,14 +142,27 @@ def build_model(args: argparse.Namespace, base_model: str):
     import torch
     from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
-    processor = WhisperProcessor.from_pretrained(base_model, language=args.language, task=args.task)
+    if args.model_dir is not None and args.adapter is not None:
+        raise SystemExit("--model-dir and --adapter are mutually exclusive")
+    # A full fine-tune writes a complete model, so it is loaded in place of the
+    # base weights; a LoRA run writes an adapter that is merged on top of them.
+    weights = str(args.model_dir) if args.model_dir is not None else base_model
+    processor_src = weights if (args.model_dir is not None
+                                and (args.model_dir / "preprocessor_config.json").exists()) else base_model
+
+    processor = WhisperProcessor.from_pretrained(processor_src, language=args.language, task=args.task)
     dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16, "float32": torch.float32}[args.dtype]
     device = args.device if (args.device != "cuda" or torch.cuda.is_available()) else "cpu"
     if device == "cpu":
         dtype = torch.float32
 
-    model = WhisperForConditionalGeneration.from_pretrained(base_model, torch_dtype=dtype)
+    model = WhisperForConditionalGeneration.from_pretrained(weights, torch_dtype=dtype)
     if args.adapter is not None:
+        if not (args.adapter / "adapter_config.json").exists():
+            raise SystemExit(
+                f"{args.adapter} has no adapter_config.json. "
+                "For a full fine-tune output, pass --model-dir instead of --adapter."
+            )
         from peft import PeftModel
 
         model = PeftModel.from_pretrained(model, str(args.adapter), torch_dtype=dtype)
@@ -170,7 +190,10 @@ def main() -> None:
             if line.strip() and not line.startswith("#")
         ]
 
-    print(f"[eval] base={base_model} adapter={args.adapter} rows={len(records)}")
+    print(
+        f"[eval] base={base_model} adapter={args.adapter} "
+        f"model_dir={args.model_dir} rows={len(records)}"
+    )
     model, processor, device, dtype = build_model(args, base_model)
 
     prompt_ids = None
@@ -251,6 +274,7 @@ def main() -> None:
         "n": n,
         "base_model": base_model,
         "adapter": str(args.adapter) if args.adapter else None,
+        "model_dir": str(args.model_dir) if args.model_dir else None,
         "manifest": str(args.manifest),
         "cer": cer,
         "wer": wer,

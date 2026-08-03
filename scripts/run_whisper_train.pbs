@@ -8,7 +8,15 @@
 #PBS -V
 
 # generated_sentences.csv -> TTS (multi-GPU parallel) -> whisper-large-v3-turbo
-# LoRA fine-tune -> merge LoRA -> CTranslate2 convert.
+# fine-tune -> CTranslate2 convert.
+#
+# FT_MODE selects how the model is trained:
+#   full (default) train the weights directly, with the ENCODER FROZEN so the
+#                  model does not overfit the acoustics of the synthetic TTS
+#                  audio; only the decoder learns the domain spellings.
+#                  Pass FREEZE_ENCODER=0 to train the encoder as well.
+#   lora           LoRA adapters only, then merged into the base model.
+# LR defaults to 1e-5 for full and 1e-4 for lora; set LR to override.
 # DEFAULT node: queue xvn_s, res=middle2 = V100 x4. TTS backend defaults to Kokoro
 # (fast); pass TTS_BACKEND=qwen3 for Qwen3-TTS instead.
 #
@@ -27,6 +35,10 @@
 #   qsub -l select=1:res=small -v NUM_SHARDS=1 scripts/run_whisper_train.pbs
 #   # A100 x2 (faster TTS) on xan_s:
 #   qsub -q xan_s -l select=1:res=middle -v NUM_SHARDS=2 scripts/run_whisper_train.pbs
+#   # LoRA instead of the default full fine-tune:
+#   qsub -v FT_MODE=lora scripts/run_whisper_train.pbs
+#   # full fine-tune including the encoder (not recommended on TTS-only data):
+#   qsub -v FREEZE_ENCODER=0 scripts/run_whisper_train.pbs
 #
 # TTS progress is printed to this log as [tts-progress] every PROGRESS_EVERY sec
 # (default 30). Per-utterance detail with ETA is in out/.../tts_data/shard_*.log.
@@ -48,13 +60,17 @@ else
     fi
 fi
 
+# full = train the weights directly (encoder frozen by default); lora = adapters.
+FT_MODE="${FT_MODE:-full}"
+FREEZE_ENCODER="${FREEZE_ENCODER:-1}"
+
 CSV="${CSV:-data/generated_sentences.csv}"
 BASE_MODEL_FILE="${BASE_MODEL_FILE:-manifest.txt}"
 WORK_ROOT="${WORK_ROOT:-out/whisper_turbo}"
 TTS_INPUT="${TTS_INPUT:-$WORK_ROOT/tts_input.jsonl}"
 DATA_ROOT="${DATA_ROOT:-$WORK_ROOT/tts_data}"
 TRAIN_MANIFEST="${TRAIN_MANIFEST:-$WORK_ROOT/train_manifest.jsonl}"
-ADAPTER_ROOT="${ADAPTER_ROOT:-$WORK_ROOT/lora}"
+ADAPTER_ROOT="${ADAPTER_ROOT:-$WORK_ROOT/$FT_MODE}"
 MERGED_DIR="${MERGED_DIR:-$WORK_ROOT/merged_hf}"
 CT2_DIR="${CT2_DIR:-$WORK_ROOT/ct2}"
 
@@ -83,8 +99,13 @@ TTS_DTYPE="${TTS_DTYPE:-float16}"
 KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
 KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
 
+if [[ "$FT_MODE" == "full" ]]; then
+    LR="${LR:-1e-5}"
+else
+    LR="${LR:-1e-4}"
+fi
+
 EPOCHS="${EPOCHS:-5}"
-LR="${LR:-1e-4}"
 BATCH_SIZE="${BATCH_SIZE:-8}"
 GRAD_ACCUM="${GRAD_ACCUM:-1}"
 LORA_R="${LORA_R:-32}"
@@ -101,12 +122,12 @@ exec > >(tee -a "$JOB_LOG") 2>&1
 
 IFS=',' read -r -a GPU_IDS <<< "$CUDA_VISIBLE_DEVICES"
 
-echo "===== whisper-large-v3-turbo LoRA train ====="
+echo "===== whisper-large-v3-turbo train (mode=$FT_MODE) ====="
 echo "host:            $(hostname)"
 echo "csv:             $CSV"
 echo "base_model_file: $BASE_MODEL_FILE"
 echo "train_manifest:  $TRAIN_MANIFEST"
-echo "adapter_root:    $ADAPTER_ROOT"
+echo "train_out:       $ADAPTER_ROOT"
 echo "merged_dir:      $MERGED_DIR"
 echo "ct2_dir:         $CT2_DIR"
 echo "gpus:            $CUDA_VISIBLE_DEVICES  (num_shards=$NUM_SHARDS)"
@@ -115,6 +136,7 @@ if [[ "$TTS_BACKEND" == "kokoro" ]]; then
 else
     echo "tts_backend:     qwen3 (speaker=$TTS_SPEAKER, dtype=$TTS_DTYPE)"
 fi
+echo "ft_mode=$FT_MODE freeze_encoder=$FREEZE_ENCODER"
 echo "epochs=$EPOCHS lr=$LR bs=$BATCH_SIZE grad_accum=$GRAD_ACCUM lora_r=$LORA_R"
 echo "started_at:      $(date -Iseconds)"
 echo "============================================="
@@ -271,8 +293,21 @@ fi
 test -s "$TRAIN_MANIFEST"
 echo "train rows: $(grep -c . "$TRAIN_MANIFEST")"
 
-# ---- step 2/4: LoRA fine-tune (DDP) ----------------------------------------
-echo "===== step 2/4: LoRA fine-tune (${NUM_SHARDS}-GPU DDP) ====="
+# ---- step 2/4: fine-tune (DDP) ---------------------------------------------
+# Both modes write the model CT2 converts to into MERGED_DIR: lora merges the
+# adapter into the base there, full saves its trained weights there directly.
+TRAIN_FLAGS=(--finetune-mode "$FT_MODE")
+if [[ "$FT_MODE" == "full" ]]; then
+    if [[ "$FREEZE_ENCODER" == "1" ]]; then
+        TRAIN_FLAGS+=(--freeze-encoder)
+    else
+        TRAIN_FLAGS+=(--no-freeze-encoder)
+    fi
+else
+    TRAIN_FLAGS+=(--lora-r "$LORA_R" --lora-alpha "$LORA_ALPHA")
+fi
+
+echo "===== step 2/4: $FT_MODE fine-tune (${NUM_SHARDS}-GPU DDP) ====="
 uv run accelerate launch --num_processes "$NUM_SHARDS" --mixed_precision fp16 \
     scripts/train_whisper_lora.py \
     --manifest "$TRAIN_MANIFEST" \
@@ -284,8 +319,7 @@ uv run accelerate launch --num_processes "$NUM_SHARDS" --mixed_precision fp16 \
     --lr "$LR" \
     --batch-size "$BATCH_SIZE" \
     --grad-accum "$GRAD_ACCUM" \
-    --lora-r "$LORA_R" \
-    --lora-alpha "$LORA_ALPHA"
+    "${TRAIN_FLAGS[@]}"
 test -d "$MERGED_DIR"
 
 # ---- step 3/4: CTranslate2 conversion --------------------------------------

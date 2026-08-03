@@ -1,5 +1,5 @@
-# CTranslate2形式のfine-tuned Whisperをwhisper-streamingで評価する設定例。
-# PBSから CONFIG=configs/whisper_streaming_eval.yaml として渡せます。
+# CTranslate2 形式の fine-tuned Whisper を whisper-streaming で評価する設定例。
+# PBS から CONFIG=configs/whisper_streaming_eval.yaml として渡す。
 
 dataset:
   manifest: out/whisper_streaming_eval/audio/manifest.jsonl
@@ -12,7 +12,6 @@ output:
   report_md: report.md
 
 whisper_streaming:
-  # PBSはこのディレクトリがなければ ufal/whisper_streaming をcloneします。
   repo_dir: vendor/whisper_streaming
   language: ja
   task: transcribe
@@ -20,18 +19,33 @@ whisper_streaming:
   min_chunk_size: 1.0
   buffer_trimming: segment
   buffer_trimming_sec: 15
-  vad: false
   warmup: true
 
+  # 無音・直前出力への過適合・反復による「湧き出し」を抑える安全側の既定値。
+  vad: true
+  condition_on_previous_text: false
+  # whisper-streamingが確定済み文字列を明示promptとして再注入する経路も止める。
+  use_initial_prompt: false
+  temperature: 0.0
+  no_speech_threshold: 0.6
+  log_prob_threshold: -1.0
+  compression_ratio_threshold: 2.4
+  repetition_penalty: 1.1
+  no_repeat_ngram_size: 3
+  hallucination_silence_threshold: 2.0
+  # 15秒bufferの高速な日本語にも余裕を残しつつ、極端な湧き出しを打ち切る。
+  max_new_tokens: 192
+
 model:
-  # ここを作成済みCTranslate2モデルのディレクトリに変更してください。
+  # ここを変換済み CTranslate2 モデルのディレクトリへ変更する。
   model_dir: /path/to/your/ctranslate2-finetuned-whisper
   device: cuda
   device_index: 0
   compute_type: float16
-  beam_size: 5
+  beam_size: 3
 
 metrics:
-  # trueの場合、fugashi/unidic-liteで日本語を分かち書きしてWERを出します。
-  # 失敗時は文字単位にフォールバックします。
+  # true の場合、fugashi/unidic-lite で日本語を分かち書きして WER を出す。
+  # 初期化に失敗した場合は文字単位へフォールバックする。
   japanese_word_tokenizer: true
+  repetition_ngram_size: 3

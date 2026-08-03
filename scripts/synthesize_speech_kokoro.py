@@ -93,6 +93,26 @@ def add_lead_silence(audio: np.ndarray, sample_rate: int, milliseconds: int) -> 
     return np.concatenate((np.zeros(samples, dtype=np.float32), audio.astype(np.float32, copy=False)))
 
 
+def build_manifest_entry(
+    rec: dict[str, Any], synthesis_text: str, wav: str, duration_sec: float, voice: str
+) -> dict[str, Any]:
+    """Preserve the kanji ASR target while recording what Kokoro actually read."""
+    target = str(rec.get("sentence", rec.get("text", "")))
+    entry = dict(rec)
+    entry.update(
+        {
+            "id": rec["id"],
+            "sentence": target,
+            "tts_text": str(rec.get("tts_text", target)),
+            "synthesis_text": synthesis_text,
+            "wav": wav,
+            "duration_sec": duration_sec,
+            "voice": voice,
+        }
+    )
+    return entry
+
+
 def main() -> None:
     args = parse_args()
     records = load_sentences(args.sentences)
@@ -114,14 +134,17 @@ def main() -> None:
             audio = add_lead_silence(audio, SAMPLE_RATE, args.lead_silence_ms)
             wav_path = wav_dir / f"{rec['id']}.wav"
             sf.write(wav_path, audio, SAMPLE_RATE, subtype="PCM_16")
-            entry = {
-                "id": rec["id"],
-                "term": rec.get("term", ""),
-                "sentence": text,
-                "wav": str(wav_path.relative_to(args.out_dir)),
-                "duration_sec": round(audio.size / SAMPLE_RATE, 2),
-                "voice": args.voice,
-            }
+            # Keep the ASR target separate from the pronunciation-adjusted text.
+            # Evaluation reads ``sentence`` as its reference, so writing ``text``
+            # (which is normally tts_text) here would incorrectly score hiragana
+            # instead of the original technical-term spelling.
+            entry = build_manifest_entry(
+                rec,
+                text,
+                str(wav_path.relative_to(args.out_dir)),
+                round(audio.size / SAMPLE_RATE, 2),
+                args.voice,
+            )
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
             fh.flush()  # 中断してもここまでの manifest は残る
             elapsed = time.monotonic() - start

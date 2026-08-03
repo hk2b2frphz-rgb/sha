@@ -64,7 +64,8 @@ def main() -> None:
     model.generation_config.task = args.task
     model.generation_config.forced_decoder_ids = None
     model.config.forced_decoder_ids = None
-    model.config.suppress_tokens = []
+    # Keep Whisper's pretrained suppression list.  Clearing it makes symbols
+    # and other unlikely tokens easier to emit and increases hallucinated text.
     merged = PeftModel.from_pretrained(model, str(args.adapter)).merge_and_unload()
 
     args.merge_dir.mkdir(parents=True, exist_ok=True)

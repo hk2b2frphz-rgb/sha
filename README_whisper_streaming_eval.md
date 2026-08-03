@@ -60,5 +60,13 @@ MODEL_DIR=/path/to/ct2-whisper qsub -V scripts/run_whisper_streaming_eval.pbs
 
 - CER: 日本語正規化後の文字誤り率
 - WER: `fugashi` + `unidic-lite` の分かち書きによる単語誤り率
+- insertions / insertion rate: 参照にない文字の挿入数・率
+- empty-reference false positives: 無音・雑音で出力された発話数と文字数
+- repeated n-grams: 仮説内の反復数・率
 - speed: 音声長 / 推論wall time
 - RTF: 推論wall time / 音声長
+
+既定設定は湧き出し対策としてVADを有効にし、前chunkの内部履歴と確定文字列のprompt再注入を
+どちらも無効にして、temperatureを0に固定します。さらにno-speech/log-prob/compression-ratio閾値、反復抑制、生成token上限を
+`configs/whisper_streaming_eval.yaml` から調整できます。インストール済みfaster-whisperが
+古く未対応の項目は警告付きで除外され、`summary.json` に項目名が記録されます。

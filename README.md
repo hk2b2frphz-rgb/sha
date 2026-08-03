@@ -3,6 +3,10 @@
 専門用語リストから Gemma 4 で発話例文を生成し、Qwen3-TTS で音声合成する。
 音声認識 (ASR) のテストデータ作成用。
 
+`annotations.tsv` から Qwen3.6-27B/vLLMで学習文を作り、Qwen3-TTSを経て
+Whisperのencoder凍結・decoder fine-tuneとCTranslate2変換まで行うMiltoka向け手順は
+[README_whisper_domain_ft.md](README_whisper_domain_ft.md) を参照。
+
 ## パイプライン
 
 ```

@@ -11,13 +11,19 @@
 # Run on the login node:
 #   PROXY_URL=http://user:pass%40@host:port bash scripts/prestage_offline.sh
 #
-# Overrides: BASE_MODEL_FILE, TTS_MODEL, WHISPER_STREAMING_DIR, WHISPER_STREAMING_REF
+# Overrides: BASE_MODEL_FILE, TTS_MODEL, LLM_MODEL, PRONUNCIATION_ASR_REPO,
+#            WHISPER_STREAMING_DIR, WHISPER_STREAMING_REF. Set PRESTAGE_LLM=0
+#            to skip the large LLM.
 
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 
 BASE_MODEL_FILE="${BASE_MODEL_FILE:-manifest.txt}"
 TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"
+# The text PBS also selects this checkpoint when OFFLINE=1.  Override the same
+# LLM_MODEL in both commands if the full BF16 checkpoint is intentionally used.
+LLM_MODEL="${LLM_MODEL:-Qwen/Qwen3.6-27B-FP8}"
+PRONUNCIATION_ASR_REPO="${PRONUNCIATION_ASR_REPO:-mobiuslabsgmbh/faster-whisper-large-v3-turbo}"
 WHISPER_STREAMING_DIR="${WHISPER_STREAMING_DIR:-vendor/whisper_streaming}"
 WHISPER_STREAMING_REF="${WHISPER_STREAMING_REF:-main}"
 
@@ -43,11 +49,23 @@ git -C "$WHISPER_STREAMING_DIR" fetch --depth 1 origin "$WHISPER_STREAMING_REF" 
 git -C "$WHISPER_STREAMING_DIR" checkout "$WHISPER_STREAMING_REF" || true
 
 echo "===== prestage 3/3: warm HuggingFace cache ====="
-# base whisper model path/id from manifest.txt (first non-comment line)
-BASE_MODEL="$(grep -v '^[[:space:]]*#' "$BASE_MODEL_FILE" | grep -v '^[[:space:]]*$' | head -n1 | tr -d '[:space:]')"
+# Prefer an explicit BASE_MODEL= setting.  Older manifests contain a bare model
+# path on the first non-comment line, which remains supported as a fallback.
+BASE_MODEL="$(sed -n 's/^[[:space:]]*BASE_MODEL[[:space:]]*=[[:space:]]*//p' "$BASE_MODEL_FILE" | head -n1 | tr -d '[:space:]')"
+if [[ -z "$BASE_MODEL" ]]; then
+    BASE_MODEL="$(grep -v '^[[:space:]]*#' "$BASE_MODEL_FILE" | grep -v '^[[:space:]]*$' | grep -v '=' | head -n1 | tr -d '[:space:]')"
+fi
 echo "base model: ${BASE_MODEL:-<empty>}"
 echo "tts model:  $TTS_MODEL"
-BASE_MODEL="$BASE_MODEL" TTS_MODEL="$TTS_MODEL" uv run python - <<'PY'
+echo "pronunciation ASR: $PRONUNCIATION_ASR_REPO"
+if [[ "${PRESTAGE_LLM:-1}" == "1" ]]; then
+    echo "llm model:  $LLM_MODEL"
+else
+    LLM_MODEL=""
+    echo "llm model:  <skipped>"
+fi
+BASE_MODEL="$BASE_MODEL" TTS_MODEL="$TTS_MODEL" LLM_MODEL="$LLM_MODEL" \
+PRONUNCIATION_ASR_REPO="$PRONUNCIATION_ASR_REPO" uv run python - <<'PY'
 import os
 from huggingface_hub import snapshot_download
 
@@ -63,6 +81,8 @@ def warm(repo):
 
 warm(os.environ.get("BASE_MODEL"))
 warm(os.environ.get("TTS_MODEL"))
+warm(os.environ.get("LLM_MODEL"))
+warm(os.environ.get("PRONUNCIATION_ASR_REPO"))
 print("[prestage] HF cache dir:", os.environ.get("HF_HOME") or "~/.cache/huggingface (default)")
 PY
 
@@ -115,6 +135,7 @@ fi
 
 echo "===== prestage done ====="
 echo "Next, on the GPU node (no network):"
+echo "  qsub -v OFFLINE=1 scripts/run_generate_training_text.pbs"
 echo "  qsub -v OFFLINE=1 scripts/run_whisper_train.pbs"
 echo "  qsub -v OFFLINE=1 scripts/run_autoresearch.pbs"
 echo "  (add other overrides after a comma, e.g. -v \"OFFLINE=1,EPOCHS=8\")"

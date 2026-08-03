@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N term_ft
+#PBS -q xan_s
+#PBS -l select=1:res=middle
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -V
+
+# Stage 3/3: train the Whisper decoder with a frozen encoder, save HF weights,
+# and atomically publish a CTranslate2 model.  This job never runs TTS.
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+RUN_ROOT="${RUN_ROOT:-out/whisper_domain_ft/default}"
+TRAIN_MANIFEST="${TRAIN_MANIFEST:-$RUN_ROOT/train_manifest.jsonl}"
+DEV_MANIFEST="${DEV_MANIFEST:-$RUN_ROOT/dev_manifest.jsonl}"
+BASE_MODEL_FILE="${BASE_MODEL_FILE:-manifest.txt}"
+TRAIN_OUT="${TRAIN_OUT:-$RUN_ROOT/model/trainer}"
+HF_DIR="${HF_DIR:-$RUN_ROOT/model/hf}"
+CT2_DIR="${CT2_DIR:-$RUN_ROOT/model/ct2}"
+
+NUM_GPUS="${NUM_GPUS:-2}"
+LANGUAGE="${LANGUAGE:-ja}"
+EPOCHS="${EPOCHS:-3}"
+LR="${LR:-5e-6}"
+BATCH_SIZE="${BATCH_SIZE:-4}"
+GRAD_ACCUM="${GRAD_ACCUM:-2}"
+WARMUP_RATIO="${WARMUP_RATIO:-0.10}"
+WEIGHT_DECAY="${WEIGHT_DECAY:-0.01}"
+LABEL_SMOOTHING="${LABEL_SMOOTHING:-0.05}"
+LR_SCHEDULER="${LR_SCHEDULER:-cosine}"
+MIXED_PRECISION="${MIXED_PRECISION:-auto}"
+EARLY_STOP_PATIENCE="${EARLY_STOP_PATIENCE:-2}"
+DEV_LIMIT="${DEV_LIMIT:-0}"
+MAX_LABEL_LEN="${MAX_LABEL_LEN:-225}"
+SEED="${SEED:-42}"
+
+# Acoustic perturbation is applied before the frozen encoder.  It prevents the
+# decoder from keying on one synthetic voice while preserving base acoustics.
+AUGMENT_COPIES="${AUGMENT_COPIES:-1}"
+AUGMENT_SPEED="${AUGMENT_SPEED:-0.05}"
+AUGMENT_NOISE_SNR_DB="${AUGMENT_NOISE_SNR_DB:-22}"
+AUGMENT_GAIN_DB="${AUGMENT_GAIN_DB:-3}"
+MASK_TIME_PROB="${MASK_TIME_PROB:-0.05}"
+MASK_FEATURE_PROB="${MASK_FEATURE_PROB:-0.02}"
+
+CT2_QUANT="${CT2_QUANT:-float16}"
+REUSE_HF="${REUSE_HF:-0}"
+REPLACE_CT2="${REPLACE_CT2:-0}"
+CT2_SMOKE_LOAD="${CT2_SMOKE_LOAD:-1}"
+
+if [[ -n "${TRAIN_PYTHON:-}" ]]; then
+    TRAIN_PYTHON="$TRAIN_PYTHON"
+elif [[ -x .venv/bin/python ]]; then
+    TRAIN_PYTHON="$PWD/.venv/bin/python"
+else
+    TRAIN_PYTHON="python3"
+fi
+
+if ! [[ "$NUM_GPUS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: NUM_GPUS must be a positive integer" >&2
+    exit 1
+fi
+if [[ -n "${GPU_LIST:-}" ]]; then
+    CUDA_VISIBLE_DEVICES="$GPU_LIST"
+else
+    CUDA_VISIBLE_DEVICES="$(seq -s, 0 $((NUM_GPUS - 1)))"
+fi
+export CUDA_VISIBLE_DEVICES
+IFS=',' read -r -a GPU_IDS <<< "$CUDA_VISIBLE_DEVICES"
+[[ "${#GPU_IDS[@]}" -eq "$NUM_GPUS" ]] || {
+    echo "ERROR: GPU_LIST has ${#GPU_IDS[@]} entries but NUM_GPUS=$NUM_GPUS" >&2
+    exit 1
+}
+
+mkdir -p "$RUN_ROOT/model" experiments/pbs_logs
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/domain_train_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+[[ -s "$TRAIN_MANIFEST" ]] || { echo "ERROR: missing train manifest: $TRAIN_MANIFEST" >&2; exit 1; }
+[[ -s "$DEV_MANIFEST" ]] || { echo "ERROR: missing dev manifest: $DEV_MANIFEST" >&2; exit 1; }
+[[ -s "$BASE_MODEL_FILE" ]] || { echo "ERROR: missing base model file: $BASE_MODEL_FILE" >&2; exit 1; }
+command -v "$TRAIN_PYTHON" >/dev/null 2>&1 || { echo "ERROR: TRAIN_PYTHON not found" >&2; exit 1; }
+"$TRAIN_PYTHON" -c 'import accelerate, ctranslate2, datasets, faster_whisper, torch, transformers' >/dev/null 2>&1 || {
+    echo "ERROR: TRAIN_PYTHON is missing the Whisper training/CT2 dependencies" >&2
+    exit 1
+}
+
+if [[ "$MIXED_PRECISION" == "auto" ]]; then
+    MIXED_PRECISION="$("$TRAIN_PYTHON" - <<'PY'
+import torch
+if not torch.cuda.is_available():
+    raise SystemExit("CUDA is required for this PBS job")
+elif getattr(torch.cuda, "is_bf16_supported", lambda: False)():
+    print("bf16")
+else:
+    print("fp16")
+PY
+)"
+fi
+case "$MIXED_PRECISION" in
+    bf16|fp16) ;;
+    *) echo "ERROR: MIXED_PRECISION must be auto, bf16, or fp16" >&2; exit 1 ;;
+esac
+
+if [[ -e "$CT2_DIR" && "$REPLACE_CT2" != "1" ]]; then
+    echo "ERROR: CT2_DIR already exists: $CT2_DIR. Use a new RUN_ROOT or REPLACE_CT2=1." >&2
+    exit 1
+fi
+if [[ "$REUSE_HF" != "1" && -e "$HF_DIR" ]]; then
+    echo "ERROR: HF_DIR already exists: $HF_DIR. Use a new RUN_ROOT or REUSE_HF=1." >&2
+    exit 1
+fi
+
+if [[ "${OFFLINE:-0}" == "1" ]]; then
+    export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+elif [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$PWD/scripts/setup_proxy.sh"
+fi
+
+echo "===== stage 3/3: Whisper decoder fine-tune ====="
+echo "run_root:       $RUN_ROOT"
+echo "train_manifest: $TRAIN_MANIFEST"
+echo "dev_manifest:   $DEV_MANIFEST"
+echo "hf_dir:         $HF_DIR"
+echo "ct2_dir:        $CT2_DIR"
+echo "gpus:           $CUDA_VISIBLE_DEVICES"
+echo "scope:          decoder only (encoder frozen)"
+echo "epochs=$EPOCHS lr=$LR batch=$BATCH_SIZE accum=$GRAD_ACCUM precision=$MIXED_PRECISION"
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
+
+if [[ "$REUSE_HF" == "1" ]]; then
+    [[ -s "$HF_DIR/config.json" ]] || {
+        echo "ERROR: REUSE_HF=1 but no complete HF model exists at $HF_DIR" >&2
+        exit 1
+    }
+    echo "Reusing existing HF model: $HF_DIR"
+else
+    "$TRAIN_PYTHON" -m accelerate.commands.launch \
+        --num_processes "$NUM_GPUS" \
+        --mixed_precision "$MIXED_PRECISION" \
+        scripts/train_whisper_lora.py \
+        --manifest "$TRAIN_MANIFEST" \
+        --dev-manifest "$DEV_MANIFEST" \
+        --dev-limit "$DEV_LIMIT" \
+        --base-model-file "$BASE_MODEL_FILE" \
+        --out-dir "$TRAIN_OUT" \
+        --merge-dir "$HF_DIR" \
+        --language "$LANGUAGE" \
+        --finetune-mode full \
+        --freeze-encoder \
+        --epochs "$EPOCHS" \
+        --lr "$LR" \
+        --batch-size "$BATCH_SIZE" \
+        --grad-accum "$GRAD_ACCUM" \
+        --warmup-ratio "$WARMUP_RATIO" \
+        --weight-decay "$WEIGHT_DECAY" \
+        --label-smoothing "$LABEL_SMOOTHING" \
+        --lr-scheduler "$LR_SCHEDULER" \
+        --mixed-precision "$MIXED_PRECISION" \
+        --early-stop-patience "$EARLY_STOP_PATIENCE" \
+        --max-label-len "$MAX_LABEL_LEN" \
+        --augment-copies "$AUGMENT_COPIES" \
+        --augment-speed "$AUGMENT_SPEED" \
+        --augment-noise-snr-db "$AUGMENT_NOISE_SNR_DB" \
+        --augment-gain-db "$AUGMENT_GAIN_DB" \
+        --mask-time-prob "$MASK_TIME_PROB" \
+        --mask-feature-prob "$MASK_FEATURE_PROB" \
+        --save-strategy epoch \
+        --seed "$SEED"
+fi
+[[ -s "$HF_DIR/config.json" ]] || { echo "ERROR: HF model was not saved" >&2; exit 1; }
+
+if [[ -n "${CT2_CONVERTER:-}" ]]; then
+    CT2_CONVERTER="$CT2_CONVERTER"
+elif [[ -x "$(dirname "$TRAIN_PYTHON")/ct2-transformers-converter" ]]; then
+    CT2_CONVERTER="$(dirname "$TRAIN_PYTHON")/ct2-transformers-converter"
+else
+    CT2_CONVERTER="$(command -v ct2-transformers-converter || true)"
+fi
+[[ -n "$CT2_CONVERTER" && -x "$CT2_CONVERTER" ]] || {
+    echo "ERROR: ct2-transformers-converter not found" >&2
+    exit 1
+}
+
+CT2_PARENT="$(dirname "$CT2_DIR")"
+CT2_NAME="$(basename "$CT2_DIR")"
+mkdir -p "$CT2_PARENT"
+CT2_TMP="$CT2_PARENT/.${CT2_NAME}.tmp.${JOB_TAG}"
+[[ ! -e "$CT2_TMP" ]] || { echo "ERROR: temporary CT2 path already exists: $CT2_TMP" >&2; exit 1; }
+
+echo "===== CTranslate2 conversion ====="
+"$CT2_CONVERTER" \
+    --model "$HF_DIR" \
+    --output_dir "$CT2_TMP" \
+    --quantization "$CT2_QUANT" \
+    --copy_files tokenizer.json preprocessor_config.json
+[[ -s "$CT2_TMP/model.bin" && -s "$CT2_TMP/config.json" ]] || {
+    echo "ERROR: incomplete CT2 conversion at $CT2_TMP" >&2
+    exit 1
+}
+
+if [[ "$CT2_SMOKE_LOAD" == "1" ]]; then
+    CUDA_VISIBLE_DEVICES="${GPU_IDS[0]}" "$TRAIN_PYTHON" - "$CT2_TMP" "$CT2_QUANT" <<'PY'
+import sys
+from faster_whisper import WhisperModel
+
+model = WhisperModel(sys.argv[1], device="cuda", device_index=0, compute_type=sys.argv[2])
+print("[ct2-smoke] model loaded:", sys.argv[1])
+del model
+PY
+fi
+
+if [[ -e "$CT2_DIR" ]]; then
+    CT2_BACKUP="$CT2_PARENT/${CT2_NAME}.backup.${JOB_TAG}"
+    [[ ! -e "$CT2_BACKUP" ]] || { echo "ERROR: backup path exists: $CT2_BACKUP" >&2; exit 1; }
+    mv "$CT2_DIR" "$CT2_BACKUP"
+    echo "previous CT2 model moved to recoverable backup: $CT2_BACKUP"
+fi
+mv "$CT2_TMP" "$CT2_DIR"
+touch "$RUN_ROOT/train.done"
+
+echo "stage 3 complete"
+echo "CTranslate2 model: $CT2_DIR"

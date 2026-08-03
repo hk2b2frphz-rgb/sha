@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import inspect
 import json
 import os
 import sys
 import time
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
@@ -24,7 +26,120 @@ from eval.asr_text import (  # noqa: E402  (needs the sys.path bootstrap above)
     normalize_text,
 )
 
-__all__ = ["JA_PUNCT_RE", "JapaneseTokenizer", "edit_distance", "error_rate", "normalize_text"]
+__all__ = [
+    "JA_PUNCT_RE",
+    "JapaneseTokenizer",
+    "edit_distance",
+    "error_rate",
+    "normalize_text",
+    "edit_operation_counts",
+    "filter_supported_kwargs",
+    "ngram_repetition_stats",
+    "parse_temperature",
+    "should_skip_no_speech_segment",
+]
+
+
+def filter_supported_kwargs(
+    func: Callable[..., Any], kwargs: dict[str, Any]
+) -> tuple[dict[str, Any], list[str]]:
+    """古い faster-whisper が未対応の keyword を signature に基づき除外する。"""
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        # C拡張やdecoratorでsignatureが取れない場合は呼出し側でTypeErrorを明示化する。
+        return dict(kwargs), []
+    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
+        return dict(kwargs), []
+    supported = {
+        name
+        for name, param in signature.parameters.items()
+        if param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    unsupported = sorted(set(kwargs) - supported)
+    return {key: value for key, value in kwargs.items() if key in supported}, unsupported
+
+
+def parse_temperature(value: Any) -> float | list[float]:
+    """YAML の scalar / sequence を faster-whisper の temperature 形式へ変換する。"""
+    if isinstance(value, (list, tuple)):
+        if not value:
+            raise ValueError("temperature sequence must not be empty")
+        return [float(item) for item in value]
+    return float(value)
+
+
+def optional_float(value: Any) -> float | None:
+    return None if value is None else float(value)
+
+
+def optional_positive_int(value: Any, *, name: str) -> int | None:
+    if value is None:
+        return None
+    parsed = int(value)
+    if parsed <= 0:
+        raise ValueError(f"{name} must be positive or null")
+    return parsed
+
+
+def should_skip_no_speech_segment(
+    no_speech_prob: float,
+    avg_logprob: float,
+    *,
+    no_speech_threshold: float | None,
+    log_prob_threshold: float | None,
+) -> bool:
+    """faster-whisper と同じ複合条件で無音らしい低信頼 segment を除外する。"""
+    if no_speech_threshold is None or no_speech_prob <= no_speech_threshold:
+        return False
+    return log_prob_threshold is None or avg_logprob < log_prob_threshold
+
+
+def edit_operation_counts(ref: list[str], hyp: list[str]) -> dict[str, int]:
+    """Levenshtein の置換・削除・挿入数を決定的な alignment で返す。"""
+    # 各セルは (距離, 置換, 削除, 挿入)。2行だけ保持し、長い湧き出しでも
+    # O(len(hyp)) メモリに抑える。
+    previous = [(j, 0, 0, j) for j in range(len(hyp) + 1)]
+    for i in range(1, len(ref) + 1):
+        current = [(i, 0, i, 0)]
+        for j in range(1, len(hyp) + 1):
+            if ref[i - 1] == hyp[j - 1]:
+                current.append(previous[j - 1])
+                continue
+            sub_cell = previous[j - 1]
+            del_cell = previous[j]
+            ins_cell = current[j - 1]
+            # 同距離なら substitution -> deletion -> insertion の順で選び、結果を安定化する。
+            candidates = [
+                (sub_cell[0] + 1, sub_cell[1] + 1, sub_cell[2], sub_cell[3]),
+                (del_cell[0] + 1, del_cell[1], del_cell[2] + 1, del_cell[3]),
+                (ins_cell[0] + 1, ins_cell[1], ins_cell[2], ins_cell[3] + 1),
+            ]
+            current.append(min(candidates, key=lambda item: item[0]))
+        previous = current
+
+    _distance, substitutions, deletions, insertions = previous[-1]
+    return {
+        "substitutions": substitutions,
+        "deletions": deletions,
+        "insertions": insertions,
+    }
+
+
+def ngram_repetition_stats(units: list[str], ngram_size: int = 3) -> dict[str, int | float]:
+    """仮説内で2回目以降に現れた n-gram の数と比率を返す。"""
+    if ngram_size <= 0:
+        raise ValueError("ngram_size must be positive")
+    total = max(0, len(units) - ngram_size + 1)
+    if not total:
+        return {"total_ngrams": 0, "repeated_ngrams": 0, "repetition_ratio": 0.0}
+    counts = Counter(tuple(units[index : index + ngram_size]) for index in range(total))
+    repeated = sum(count - 1 for count in counts.values() if count > 1)
+    return {
+        "total_ngrams": total,
+        "repeated_ngrams": repeated,
+        "repetition_ratio": repeated / total,
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,8 +192,19 @@ class ConfigurableFasterWhisperASR:
     compute_type: str
     beam_size: int
     vad_filter: bool
+    condition_on_previous_text: bool = False
+    use_initial_prompt: bool = False
+    temperature: float | list[float] = 0.0
+    no_speech_threshold: float | None = 0.6
+    log_prob_threshold: float | None = -1.0
+    compression_ratio_threshold: float | None = 2.4
+    repetition_penalty: float = 1.1
+    no_repeat_ngram_size: int = 3
+    hallucination_silence_threshold: float | None = 2.0
+    max_new_tokens: int | None = 192
 
     sep: str = ""
+    _reported_unsupported: set[str] = field(default_factory=set, init=False, repr=False)
 
     def __post_init__(self) -> None:
         from faster_whisper import WhisperModel
@@ -92,22 +218,52 @@ class ConfigurableFasterWhisperASR:
         )
 
     def transcribe(self, audio: Any, init_prompt: str = "") -> list[Any]:
-        segments, _info = self.model.transcribe(
-            audio,
-            language=self.original_language,
-            task=self.task,
-            initial_prompt=init_prompt,
-            beam_size=self.beam_size,
-            word_timestamps=True,
-            condition_on_previous_text=True,
-            vad_filter=self.vad_filter,
-        )
+        options: dict[str, Any] = {
+            "language": self.original_language,
+            "task": self.task,
+            "beam_size": self.beam_size,
+            "word_timestamps": True,
+            "condition_on_previous_text": self.condition_on_previous_text,
+            "vad_filter": self.vad_filter,
+            "temperature": self.temperature,
+            "no_speech_threshold": self.no_speech_threshold,
+            "log_prob_threshold": self.log_prob_threshold,
+            "compression_ratio_threshold": self.compression_ratio_threshold,
+            "repetition_penalty": self.repetition_penalty,
+            "no_repeat_ngram_size": self.no_repeat_ngram_size,
+            "hallucination_silence_threshold": self.hallucination_silence_threshold,
+            "max_new_tokens": self.max_new_tokens,
+        }
+        if self.use_initial_prompt and init_prompt:
+            options["initial_prompt"] = init_prompt
+        options = {key: value for key, value in options.items() if value is not None}
+        compatible_options, unsupported = filter_supported_kwargs(self.model.transcribe, options)
+        new_unsupported = set(unsupported) - self._reported_unsupported
+        if new_unsupported:
+            print(
+                "[WARN] installed faster-whisper does not support these decoding options; "
+                f"ignoring them: {', '.join(sorted(new_unsupported))}",
+                file=sys.stderr,
+            )
+            self._reported_unsupported.update(new_unsupported)
+        try:
+            segments, _info = self.model.transcribe(audio, **compatible_options)
+        except TypeError as exc:
+            raise RuntimeError(
+                "faster-whisper transcribe API is incompatible with the configured options. "
+                "Upgrade faster-whisper or remove unsupported decoding options from the config."
+            ) from exc
         return list(segments)
 
     def ts_words(self, segments: list[Any]) -> list[tuple[float, float, str]]:
         out: list[tuple[float, float, str]] = []
         for segment in segments:
-            if getattr(segment, "no_speech_prob", 0.0) > 0.9:
+            if should_skip_no_speech_segment(
+                float(getattr(segment, "no_speech_prob", 0.0)),
+                float(getattr(segment, "avg_logprob", float("-inf"))),
+                no_speech_threshold=self.no_speech_threshold,
+                log_prob_threshold=self.log_prob_threshold,
+            ):
                 continue
             for word in segment.words or []:
                 out.append((float(word.start), float(word.end), str(word.word)))
@@ -190,8 +346,24 @@ def main() -> None:
         device=str(model_cfg.get("device", "cuda")),
         device_index=int(model_cfg.get("device_index", 0)),
         compute_type=str(model_cfg.get("compute_type", "float16")),
-        beam_size=int(model_cfg.get("beam_size", 5)),
-        vad_filter=bool(ws_cfg.get("vad", False)),
+        beam_size=int(model_cfg.get("beam_size", 3)),
+        vad_filter=bool(ws_cfg.get("vad", True)),
+        condition_on_previous_text=bool(ws_cfg.get("condition_on_previous_text", False)),
+        use_initial_prompt=bool(ws_cfg.get("use_initial_prompt", False)),
+        temperature=parse_temperature(ws_cfg.get("temperature", 0.0)),
+        no_speech_threshold=optional_float(ws_cfg.get("no_speech_threshold", 0.6)),
+        log_prob_threshold=optional_float(ws_cfg.get("log_prob_threshold", -1.0)),
+        compression_ratio_threshold=optional_float(
+            ws_cfg.get("compression_ratio_threshold", 2.4)
+        ),
+        repetition_penalty=float(ws_cfg.get("repetition_penalty", 1.1)),
+        no_repeat_ngram_size=int(ws_cfg.get("no_repeat_ngram_size", 3)),
+        hallucination_silence_threshold=optional_float(
+            ws_cfg.get("hallucination_silence_threshold", 2.0)
+        ),
+        max_new_tokens=optional_positive_int(
+            ws_cfg.get("max_new_tokens", 192), name="whisper_streaming.max_new_tokens"
+        ),
     )
     online = module.OnlineASRProcessor(
         asr,
@@ -206,6 +378,9 @@ def main() -> None:
             asr.transcribe(warm)
 
     tokenizer = JapaneseTokenizer(bool(metrics_cfg.get("japanese_word_tokenizer", True)))
+    repetition_ngram_size = int(metrics_cfg.get("repetition_ngram_size", 3))
+    if repetition_ngram_size <= 0:
+        raise SystemExit("metrics.repetition_ngram_size must be positive")
     predictions_path = out_dir / str(output_cfg.get("predictions_jsonl", "predictions.jsonl"))
     results: list[dict[str, Any]] = []
     total_audio = 0.0
@@ -218,6 +393,9 @@ def main() -> None:
             hyp_chars = list(normalize_text(hyp))
             ref_words = tokenizer.words(ref)
             hyp_words = tokenizer.words(hyp)
+            edits = edit_operation_counts(ref_chars, hyp_chars)
+            repetition = ngram_repetition_stats(hyp_chars, repetition_ngram_size)
+            empty_ref_false_positive = not ref_chars and bool(hyp_chars)
             row = {
                 "id": rec.get("id", f"{idx:04d}"),
                 "wav": rec.get("wav"),
@@ -229,6 +407,19 @@ def main() -> None:
                 "speed_x": duration / wall if wall else None,
                 "cer": error_rate(ref_chars, hyp_chars),
                 "wer": error_rate(ref_words, hyp_words),
+                "reference_chars": len(ref_chars),
+                "prediction_chars": len(hyp_chars),
+                "char_substitutions": edits["substitutions"],
+                "char_deletions": edits["deletions"],
+                "char_insertions": edits["insertions"],
+                "empty_reference_false_positive": empty_ref_false_positive,
+                "empty_reference_false_positive_chars": len(hyp_chars)
+                if empty_ref_false_positive
+                else 0,
+                "repetition_ngram_size": repetition_ngram_size,
+                "repeated_ngrams": repetition["repeated_ngrams"],
+                "total_ngrams": repetition["total_ngrams"],
+                "repetition_ratio": repetition["repetition_ratio"],
             }
             total_audio += duration
             total_wall += wall
@@ -241,6 +432,17 @@ def main() -> None:
             )
 
     n = len(results)
+    total_reference_chars = sum(int(r["reference_chars"]) for r in results)
+    total_prediction_chars = sum(int(r["prediction_chars"]) for r in results)
+    total_insertions = sum(int(r["char_insertions"]) for r in results)
+    total_deletions = sum(int(r["char_deletions"]) for r in results)
+    total_substitutions = sum(int(r["char_substitutions"]) for r in results)
+    empty_reference_count = sum(1 for r in results if int(r["reference_chars"]) == 0)
+    empty_ref_fp_count = sum(1 for r in results if r["empty_reference_false_positive"])
+    empty_ref_fp_chars = sum(int(r["empty_reference_false_positive_chars"]) for r in results)
+    total_ngrams = sum(int(r["total_ngrams"]) for r in results)
+    repeated_ngrams = sum(int(r["repeated_ngrams"]) for r in results)
+    repetition_utterances = sum(1 for r in results if int(r["repeated_ngrams"]) > 0)
     summary = {
         "n": n,
         "manifest": str(manifest),
@@ -248,11 +450,47 @@ def main() -> None:
         "tokenizer": tokenizer.mode,
         "cer": sum(r["cer"] for r in results) / n,
         "wer": sum(r["wer"] for r in results) / n,
+        "reference_chars": total_reference_chars,
+        "prediction_chars": total_prediction_chars,
+        "char_substitutions": total_substitutions,
+        "char_deletions": total_deletions,
+        "char_insertions": total_insertions,
+        "insertions": total_insertions,
+        "insertion_rate": total_insertions / total_reference_chars
+        if total_reference_chars
+        else None,
+        "empty_reference_count": empty_reference_count,
+        "empty_reference_false_positive_count": empty_ref_fp_count,
+        "empty_reference_false_positive_chars": empty_ref_fp_chars,
+        # 短い別名も残し、後処理側で扱いやすくする。
+        "empty_ref_false_positive_count": empty_ref_fp_count,
+        "empty_ref_false_positive_chars": empty_ref_fp_chars,
+        "repetition_ngram_size": repetition_ngram_size,
+        "repeated_ngrams": repeated_ngrams,
+        "repetition_count": repeated_ngrams,
+        "total_ngrams": total_ngrams,
+        "repetition_ratio": repeated_ngrams / total_ngrams if total_ngrams else 0.0,
+        "repetition_utterance_count": repetition_utterances,
         "total_audio_sec": total_audio,
         "total_wall_sec": total_wall,
         "rtf": total_wall / total_audio if total_audio else None,
         "speed_x": total_audio / total_wall if total_wall else None,
         "min_chunk_size": min_chunk_size,
+        "decoding": {
+            "beam_size": asr.beam_size,
+            "vad": asr.vad_filter,
+            "condition_on_previous_text": asr.condition_on_previous_text,
+            "use_initial_prompt": asr.use_initial_prompt,
+            "temperature": asr.temperature,
+            "no_speech_threshold": asr.no_speech_threshold,
+            "log_prob_threshold": asr.log_prob_threshold,
+            "compression_ratio_threshold": asr.compression_ratio_threshold,
+            "repetition_penalty": asr.repetition_penalty,
+            "no_repeat_ngram_size": asr.no_repeat_ngram_size,
+            "hallucination_silence_threshold": asr.hallucination_silence_threshold,
+            "max_new_tokens": asr.max_new_tokens,
+        },
+        "unsupported_faster_whisper_options": sorted(asr._reported_unsupported),
     }
     summary_path = out_dir / str(output_cfg.get("summary_json", "summary.json"))
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -267,6 +505,21 @@ def main() -> None:
                 f"- model_dir: `{summary['model_dir']}`",
                 f"- CER: {summary['cer']:.4f}",
                 f"- WER: {summary['wer']:.4f} ({summary['tokenizer']})",
+                f"- insertions: {summary['char_insertions']} / rate "
+                + (
+                    f"{summary['insertion_rate']:.4f}"
+                    if summary["insertion_rate"] is not None
+                    else "n/a"
+                ),
+                f"- empty-reference false positives: "
+                f"{summary['empty_reference_false_positive_count']} utterances / "
+                f"{summary['empty_reference_false_positive_chars']} chars",
+                f"- repeated {summary['repetition_ngram_size']}-grams: "
+                f"{summary['repeated_ngrams']} / {summary['total_ngrams']} "
+                f"({summary['repetition_ratio']:.4f}); "
+                f"utterances={summary['repetition_utterance_count']}",
+                f"- unsupported faster-whisper options: "
+                f"{summary['unsupported_faster_whisper_options'] or 'none'}",
                 f"- speed: {summary['speed_x']:.2f}x audio / RTF {summary['rtf']:.4f}",
                 f"- total audio: {summary['total_audio_sec']:.2f} sec",
                 f"- total wall: {summary['total_wall_sec']:.2f} sec",

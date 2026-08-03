@@ -1,0 +1,344 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N term_tts
+#PBS -q xvn_s
+#PBS -l select=1:res=middle2
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -V
+
+# Stage 2/3: validated corpus -> Qwen3-TTS WAVs -> train/dev manifests.
+#
+# xvn_s/res=middle2 provides four V100 GPUs.  TTS_ENGINE=auto prefers the
+# Miltoka vLLM-Omni batch Speech API when its CUDA build supports V100, then
+# falls back to the official qwen-tts list-batch implementation.  Set the
+# engine explicitly if automatic probing is undesirable.
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+RUN_ROOT="${RUN_ROOT:-out/whisper_domain_ft/default}"
+CORPUS="${CORPUS:-$RUN_ROOT/corpus.jsonl}"
+TTS_ROOT="${TTS_ROOT:-$RUN_ROOT/tts}"
+COMBINED_MANIFEST="${COMBINED_MANIFEST:-$RUN_ROOT/combined_manifest.jsonl}"
+TRAIN_MANIFEST="${TRAIN_MANIFEST:-$RUN_ROOT/train_manifest.jsonl}"
+DEV_MANIFEST="${DEV_MANIFEST:-$RUN_ROOT/dev_manifest.jsonl}"
+
+TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"
+TTS_SPEAKER="${TTS_SPEAKER:-Ono_Anna}"
+TTS_LANGUAGE="${TTS_LANGUAGE:-Japanese}"
+TTS_INSTRUCT="${TTS_INSTRUCT:-Speak at a calm natural pace with clear pronunciation.}"
+TTS_BATCH_SIZE="${TTS_BATCH_SIZE:-4}"
+TTS_DTYPE="${TTS_DTYPE:-float16}"
+TTS_ATTN_IMPLEMENTATION="${TTS_ATTN_IMPLEMENTATION:-auto}"
+LEAD_SILENCE_MS="${LEAD_SILENCE_MS:-120}"
+TRAIL_SILENCE_MS="${TRAIL_SILENCE_MS:-120}"
+# Empty PRONUNCIATION_ASR_MODEL disables the kanji-first check explicitly.
+# Use '-' rather than ':-' so an intentionally empty qsub value stays empty.
+PRONUNCIATION_ASR_MODEL="${PRONUNCIATION_ASR_MODEL-large-v3-turbo}"
+PRONUNCIATION_ASR_COMPUTE_TYPE="${PRONUNCIATION_ASR_COMPUTE_TYPE:-float16}"
+PRONUNCIATION_ASR_BEAM_SIZE="${PRONUNCIATION_ASR_BEAM_SIZE:-5}"
+PRONUNCIATION_PASS_THRESHOLD="${PRONUNCIATION_PASS_THRESHOLD:-0.15}"
+PRONUNCIATION_UNCERTAIN_THRESHOLD="${PRONUNCIATION_UNCERTAIN_THRESHOLD:-0.35}"
+NUM_SHARDS="${NUM_SHARDS:-4}"
+DEV_RATIO="${DEV_RATIO:-0.10}"
+SEED="${SEED:-42}"
+
+REQUESTED_ENGINE="${TTS_ENGINE:-auto}"
+VLLM_CMD="${VLLM_CMD:-vllm}"
+VLLM_OMNI_CMD="${VLLM_OMNI_CMD:-$VLLM_CMD}"
+if [[ -n "${TTS_PYTHON:-}" ]]; then
+    TTS_PYTHON="$TTS_PYTHON"
+elif [[ -x .venv/bin/python ]]; then
+    TTS_PYTHON="$PWD/.venv/bin/python"
+else
+    TTS_PYTHON="python3"
+fi
+PIPELINE_PYTHON="${PIPELINE_PYTHON:-$TTS_PYTHON}"
+if [[ -n "${VLLM_OMNI_PYTHON:-}" ]]; then
+    VLLM_OMNI_PYTHON="$VLLM_OMNI_PYTHON"
+elif command -v "$VLLM_OMNI_CMD" >/dev/null 2>&1 && [[ -x "$(dirname "$(command -v "$VLLM_OMNI_CMD")")/python" ]]; then
+    VLLM_OMNI_PYTHON="$(dirname "$(command -v "$VLLM_OMNI_CMD")")/python"
+else
+    VLLM_OMNI_PYTHON="python3"
+fi
+
+if ! [[ "$NUM_SHARDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: NUM_SHARDS must be a positive integer" >&2
+    exit 1
+fi
+if [[ -n "${GPU_LIST:-}" ]]; then
+    CUDA_VISIBLE_DEVICES="$GPU_LIST"
+else
+    CUDA_VISIBLE_DEVICES="$(seq -s, 0 $((NUM_SHARDS - 1)))"
+fi
+export CUDA_VISIBLE_DEVICES
+IFS=',' read -r -a GPU_IDS <<< "$CUDA_VISIBLE_DEVICES"
+[[ "${#GPU_IDS[@]}" -eq "$NUM_SHARDS" ]] || {
+    echo "ERROR: GPU_LIST has ${#GPU_IDS[@]} entries but NUM_SHARDS=$NUM_SHARDS" >&2
+    exit 1
+}
+
+mkdir -p "$TTS_ROOT" experiments/pbs_logs
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/domain_tts_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+[[ -s "$CORPUS" ]] || { echo "ERROR: missing corpus: $CORPUS" >&2; exit 1; }
+command -v "$PIPELINE_PYTHON" >/dev/null 2>&1 || {
+    echo "ERROR: PIPELINE_PYTHON not found: $PIPELINE_PYTHON" >&2
+    exit 1
+}
+"$PIPELINE_PYTHON" -c 'import numpy, soundfile' >/dev/null 2>&1 || {
+    echo "ERROR: PIPELINE_PYTHON needs numpy and soundfile" >&2
+    exit 1
+}
+if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
+fi
+
+if [[ "${OFFLINE:-0}" == "1" ]]; then
+    export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+else
+    if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$PWD/scripts/setup_proxy.sh"
+    fi
+fi
+
+supports_vllm_omni=0
+if command -v "$VLLM_OMNI_CMD" >/dev/null 2>&1 \
+    && command -v "$VLLM_OMNI_PYTHON" >/dev/null 2>&1 \
+    && "$VLLM_OMNI_PYTHON" -c 'import vllm_omni' >/dev/null 2>&1; then
+    supports_vllm_omni=1
+    GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n1 2>/dev/null || true)"
+    RUNTIME_CUDA="$("$VLLM_OMNI_PYTHON" -c 'import torch; print(torch.version.cuda or "")' 2>/dev/null || true)"
+    CUDA_MAJOR="${RUNTIME_CUDA%%.*}"
+    # CUDA 13 removed offline compilation/library support for Volta.
+    if [[ "$GPU_NAME" == *V100* && "$CUDA_MAJOR" =~ ^[0-9]+$ && "$CUDA_MAJOR" -ge 13 ]]; then
+        echo "vLLM-Omni uses CUDA $RUNTIME_CUDA on V100; disabling incompatible engine"
+        supports_vllm_omni=0
+    fi
+fi
+
+case "$REQUESTED_ENGINE" in
+    auto)
+        if [[ "$supports_vllm_omni" == "1" ]]; then TTS_ENGINE="vllm_omni"; else TTS_ENGINE="qwen_tts"; fi
+        ;;
+    vllm_omni)
+        [[ "$supports_vllm_omni" == "1" ]] || {
+            echo "ERROR: requested vllm_omni is unavailable or incompatible with this V100 runtime" >&2
+            exit 1
+        }
+        TTS_ENGINE="vllm_omni"
+        ;;
+    qwen_tts) TTS_ENGINE="qwen_tts" ;;
+    *) echo "ERROR: TTS_ENGINE must be auto, vllm_omni, or qwen_tts" >&2; exit 1 ;;
+esac
+
+server_pids=()
+server_urls=()
+stop_servers() {
+    local pid
+    for pid in "${server_pids[@]:-}"; do
+        [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+    done
+    for pid in "${server_pids[@]:-}"; do
+        [[ -n "$pid" ]] && wait "$pid" 2>/dev/null || true
+    done
+    server_pids=()
+}
+trap stop_servers EXIT INT TERM
+
+start_omni_servers() {
+    local job_digits port_base i gpu port log
+    job_digits="${JOB_TAG//[!0-9]/}"
+    job_digits="${job_digits: -6}"
+    [[ -n "$job_digits" ]] || job_digits="$$"
+    port_base="${VLLM_OMNI_PORT_BASE:-$((19000 + (10#$job_digits % 500)) * 8))}"
+    if [[ -z "${VLLM_STAGE_OVERRIDES:-}" ]]; then
+        VLLM_STAGE_OVERRIDES='{"0":{"max_num_seqs":10,"gpu_memory_utilization":0.35},"1":{"max_num_seqs":10,"gpu_memory_utilization":0.35}}'
+    fi
+    for ((i = 0; i < NUM_SHARDS; i++)); do
+        gpu="${GPU_IDS[$i]}"
+        port=$((port_base + i))
+        log="$TTS_ROOT/vllm_omni_$(printf '%02d' "$i").log"
+        omni_args=(
+            serve "$TTS_MODEL"
+            --omni
+            --host 127.0.0.1
+            --port "$port"
+            --trust-remote-code
+            --enforce-eager
+            --stage-overrides "$VLLM_STAGE_OVERRIDES"
+        )
+        if [[ -n "${VLLM_OMNI_DEPLOY_CONFIG:-}" ]]; then
+            omni_args+=(--deploy-config "$VLLM_OMNI_DEPLOY_CONFIG")
+        fi
+        CUDA_VISIBLE_DEVICES="$gpu" "$VLLM_OMNI_CMD" "${omni_args[@]}" >"$log" 2>&1 &
+        server_pids+=("$!")
+        server_urls+=("http://127.0.0.1:${port}/v1")
+        echo "started vLLM-Omni shard=$i gpu=$gpu port=$port log=$log"
+    done
+
+    local ready attempt pid url all_ready
+    ready=0
+    for attempt in $(seq 1 180); do
+        all_ready=1
+        for ((i = 0; i < NUM_SHARDS; i++)); do
+            pid="${server_pids[$i]}"
+            url="${server_urls[$i]}/models"
+            if ! kill -0 "$pid" 2>/dev/null; then
+                all_ready=0
+                break 2
+            fi
+            if ! "$PIPELINE_PYTHON" - "$url" <<'PY' >/dev/null 2>&1
+import sys
+import urllib.request
+with urllib.request.urlopen(sys.argv[1], timeout=4) as response:
+    raise SystemExit(0 if response.status == 200 else 1)
+PY
+            then
+                all_ready=0
+            fi
+        done
+        if [[ "$all_ready" == "1" ]]; then ready=1; break; fi
+        sleep 5
+    done
+    [[ "$ready" == "1" ]]
+}
+
+if [[ "$TTS_ENGINE" == "vllm_omni" ]]; then
+    if ! start_omni_servers; then
+        stop_servers
+        if [[ "$REQUESTED_ENGINE" == "auto" ]]; then
+            echo "vLLM-Omni startup failed; falling back to official qwen-tts batch"
+            TTS_ENGINE="qwen_tts"
+        else
+            echo "ERROR: vLLM-Omni startup failed; see $TTS_ROOT/vllm_omni_*.log" >&2
+            exit 1
+        fi
+    fi
+fi
+
+require_qwen_tts() {
+    command -v "$TTS_PYTHON" >/dev/null 2>&1 || {
+        echo "ERROR: TTS_PYTHON not found: $TTS_PYTHON" >&2
+        return 1
+    }
+    "$TTS_PYTHON" -c 'import qwen_tts, soundfile, torch' >/dev/null 2>&1 || {
+        echo "ERROR: TTS_PYTHON needs qwen-tts, soundfile, and torch" >&2
+        return 1
+    }
+}
+
+if [[ "$TTS_ENGINE" == "qwen_tts" ]]; then
+    require_qwen_tts || exit 1
+fi
+
+echo "===== stage 2/3: Qwen3-TTS ====="
+echo "run_root:     $RUN_ROOT"
+echo "corpus:       $CORPUS"
+echo "engine:       $TTS_ENGINE"
+echo "model:        $TTS_MODEL"
+echo "speaker:      $TTS_SPEAKER"
+echo "num_shards:   $NUM_SHARDS"
+echo "batch_size:   $TTS_BATCH_SIZE"
+echo "pronunciation ASR: ${PRONUNCIATION_ASR_MODEL:-disabled}"
+
+run_tts_shards() {
+    local i shard_dir shard_log gpu pid failed
+    local -a pids synth_args
+    pids=()
+    for ((i = 0; i < NUM_SHARDS; i++)); do
+        shard_dir="$TTS_ROOT/$(printf 'shard_%02d' "$i")"
+        shard_log="$TTS_ROOT/$(printf 'shard_%02d_%s.log' "$i" "$TTS_ENGINE")"
+        gpu="${GPU_IDS[$i]}"
+        mkdir -p "$shard_dir"
+        synth_args=(
+            scripts/synthesize_speech.py
+            --sentences "$CORPUS"
+            --out-dir "$shard_dir"
+            --model "$TTS_MODEL"
+            --speaker "$TTS_SPEAKER"
+            --language "$TTS_LANGUAGE"
+            --instruct "$TTS_INSTRUCT"
+            --batch-size "$TTS_BATCH_SIZE"
+            --num-shards "$NUM_SHARDS"
+            --shard-index "$i"
+            --lead-silence-ms "$LEAD_SILENCE_MS"
+            --trail-silence-ms "$TRAIL_SILENCE_MS"
+            --resume
+        )
+        if [[ -n "$PRONUNCIATION_ASR_MODEL" ]]; then
+            synth_args+=(
+                --pronunciation-check-model "$PRONUNCIATION_ASR_MODEL"
+                --pronunciation-check-device cuda
+                --pronunciation-check-device-index 0
+                --pronunciation-check-compute-type "$PRONUNCIATION_ASR_COMPUTE_TYPE"
+                --pronunciation-check-beam-size "$PRONUNCIATION_ASR_BEAM_SIZE"
+                --pronunciation-pass-threshold "$PRONUNCIATION_PASS_THRESHOLD"
+                --pronunciation-uncertain-threshold "$PRONUNCIATION_UNCERTAIN_THRESHOLD"
+            )
+        fi
+        if [[ "$TTS_ENGINE" == "vllm_omni" ]]; then
+            synth_args+=(--api-base "${server_urls[$i]}")
+            CUDA_VISIBLE_DEVICES="$gpu" "$PIPELINE_PYTHON" "${synth_args[@]}" >"$shard_log" 2>&1 &
+        else
+            synth_args+=(
+                --device cuda:0
+                --dtype "$TTS_DTYPE"
+                --attn-implementation "$TTS_ATTN_IMPLEMENTATION"
+            )
+            CUDA_VISIBLE_DEVICES="$gpu" "$TTS_PYTHON" "${synth_args[@]}" >"$shard_log" 2>&1 &
+        fi
+        pids+=("$!")
+        echo "started TTS engine=$TTS_ENGINE shard=$i gpu=$gpu log=$shard_log"
+    done
+
+    failed=0
+    for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+    [[ "$failed" == "0" ]]
+}
+
+if ! run_tts_shards; then
+    if [[ "$TTS_ENGINE" == "vllm_omni" && "$REQUESTED_ENGINE" == "auto" ]]; then
+        echo "vLLM-Omni synthesis failed; falling back to official qwen-tts batch"
+        stop_servers
+        TTS_ENGINE="qwen_tts"
+        require_qwen_tts || exit 1
+        run_tts_shards || {
+            echo "ERROR: qwen-tts fallback failed; see $TTS_ROOT/shard_*_qwen_tts.log" >&2
+            exit 1
+        }
+    else
+        echo "ERROR: a TTS shard failed; see $TTS_ROOT/shard_*_${TTS_ENGINE}.log" >&2
+        exit 1
+    fi
+fi
+stop_servers
+
+build_args=(
+    "$PIPELINE_PYTHON" scripts/build_whisper_manifest.py
+    --tts-input "$CORPUS"
+    --out "$COMBINED_MANIFEST"
+)
+for ((i = 0; i < NUM_SHARDS; i++)); do
+    build_args+=(--synth-dir "$TTS_ROOT/$(printf 'shard_%02d' "$i")")
+done
+"${build_args[@]}"
+
+"$PIPELINE_PYTHON" scripts/split_whisper_manifest.py \
+    --input "$COMBINED_MANIFEST" \
+    --train-out "$TRAIN_MANIFEST" \
+    --dev-out "$DEV_MANIFEST" \
+    --dev-ratio "$DEV_RATIO" \
+    --seed "$SEED"
+
+[[ -s "$TRAIN_MANIFEST" && -s "$DEV_MANIFEST" ]] || {
+    echo "ERROR: train/dev split was not created" >&2
+    exit 1
+}
+touch "$RUN_ROOT/tts.done"
+echo "stage 2 complete: train=$TRAIN_MANIFEST dev=$DEV_MANIFEST"
