@@ -38,6 +38,23 @@ term	reading
 - `VLLM_OMNI_PYTHON`: 上記と同じvLLM-Omni環境のPython（省略時は実行ファイルの隣を探索）
 - `TRAIN_PYTHON`: `pyproject.toml` のWhisper学習環境
 
+`VLLM_CMD` には環境のディレクトリではなく、文章生成用の `vllm` 実行ファイルそのものを
+絶対パスで指定します。Miltokaで既存のQwen文章生成環境を使う場合は、通常は次の場所です。
+`.venv-vllm-omni` はQwen3-TTS用なので、stage 1の指定には使いません。
+
+```bash
+cd /absolute/path/to/miltoka
+VLLM_CMD="$PWD/.venv_vllm_qwen_10000/bin/vllm"
+
+test -x "$VLLM_CMD" || { echo "vLLM executable not found: $VLLM_CMD" >&2; exit 1; }
+"$VLLM_CMD" --version
+```
+
+上の確認に成功したシェルからterm2speechへ移動し、`qsub -v` に
+`VLLM_CMD=$VLLM_CMD` を含めます。環境変数名は大文字で正確に `VLLM_CMD` です。
+`test -x` が失敗する場合はパスの問題ではなく、そのMiltoka checkoutに文章生成用の
+vLLM環境がまだ存在しません。
+
 Qwen3.6-27BのBF16重みだけで約56 GBを使います。stage 1はtensor-parallel対象GPUの
 合計メモリが65 GB未満なら公式の `Qwen/Qwen3.6-27B-FP8` を自動選択します。ローカル配置済みの
 重みを使う場合は `LLM_MODEL=/shared/models/...` を明示してください。
@@ -75,11 +92,20 @@ qsub -v "PROXY_URL=$PROXY_URL,PROXY_DEBUG=1" scripts/run_net_check.pbs
 実行ごとに新しい `RUN_ROOT` を推奨します。以下はproxyを明示してPBS依存関係で直列につなぐ例です。
 
 ```bash
+cd /absolute/path/to/term2speech
+
+REPO="$PWD"
+MIL="/absolute/path/to/miltoka"
+VLLM_CMD="$MIL/.venv_vllm_qwen_10000/bin/vllm"
+CLIENT_PYTHON="$REPO/.venv/bin/python"
 RUN_ROOT="out/whisper_domain_ft/run_$(date +%Y%m%d_%H%M%S)"
 ANNOTATIONS="/absolute/path/to/annotations.tsv"
 PROXY_URL='http://user:password%40example@proxy.example.com:8080'
 
-text_job=$(qsub -v "RUN_ROOT=$RUN_ROOT,ANNOTATIONS=$ANNOTATIONS,PROXY_URL=$PROXY_URL" \
+test -x "$VLLM_CMD" || { echo "vLLM executable not found: $VLLM_CMD" >&2; exit 1; }
+"$VLLM_CMD" --version
+
+text_job=$(qsub -v "RUN_ROOT=$RUN_ROOT,ANNOTATIONS=$ANNOTATIONS,PROXY_URL=$PROXY_URL,VLLM_CMD=$VLLM_CMD,CLIENT_PYTHON=$CLIENT_PYTHON" \
   scripts/run_generate_training_text.pbs)
 
 tts_job=$(qsub -W "depend=afterok:$text_job" \
@@ -99,7 +125,7 @@ printf 'text=%s\ntts=%s\ntrain=%s\n' "$text_job" "$tts_job" "$train_job"
 生成します。vLLMへ並列リクエストを送り、Qwen3.6はnon-thinkingのJSON出力に固定します。
 
 ```bash
-qsub -v "RUN_ROOT=out/domain_run,SENTENCES_PER_TERM=16,REPLAY_RATIO=1.0" \
+qsub -v "RUN_ROOT=out/domain_run,SENTENCES_PER_TERM=16,REPLAY_RATIO=1.0,VLLM_CMD=$VLLM_CMD,CLIENT_PYTHON=$CLIENT_PYTHON" \
   scripts/run_generate_training_text.pbs
 ```
 
