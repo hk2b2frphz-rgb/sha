@@ -151,6 +151,12 @@ else
         echo "ERROR: vLLM is unavailable. Set VLLM_CMD or VLLM_BASE_URL." >&2
         exit 1
     }
+    VLLM_BIN_DIR="$(dirname "$(command -v "$VLLM_CMD")")"
+    export PATH="$VLLM_BIN_DIR:$PATH"
+    command -v ninja >/dev/null 2>&1 || {
+        echo "ERROR: ninja is unavailable in the vLLM environment: $VLLM_BIN_DIR" >&2
+        exit 1
+    }
     JOB_DIGITS="${JOB_TAG//[!0-9]/}"
     JOB_DIGITS="${JOB_DIGITS: -6}"
     [[ -n "$JOB_DIGITS" ]] || JOB_DIGITS="$$"

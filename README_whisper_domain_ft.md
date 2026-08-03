@@ -46,7 +46,12 @@ PBSと投入helperが残りのパスを次の規則で埋めます。
 | client・公式TTS fallback・Whisper学習 | `$REPO/.venv/bin/python` |
 
 文章生成用の`.venv_vllm_qwen_10000`とTTS用の`.venv-vllm-omni`は別環境です。
-投入helperは両方の実行ファイルを検査し、不足していればジョブ投入前に対象パスを表示して停止します。
+投入helperは両方のvLLM・Python・`ninja`を検査し、不足していればジョブ投入前に対象パスを表示して停止します。
+各PBSは選択したvLLM環境の`bin`を`PATH`の先頭へ追加するため、PyTorchの実行時コンパイルも
+同じ環境にインストールされた`ninja`を使用します。文章生成側で`ninja`がなければ、engine起動前に
+対象環境を示したエラーになります。TTSの`auto`選択では`ninja`がないvLLM-Omniを使用しません。
+これは各PBSプロセス内だけの一時的な`PATH`設定です。Miltoka側の仮想環境は読み取り専用で利用し、
+環境作成、`pip install`、パッケージ更新、ファイル変更は行いません。
 
 Qwen3.6-27BのBF16重みだけで約56 GBを使います。stage 1はtensor-parallel対象GPUの
 合計メモリが65 GB未満なら公式の `Qwen/Qwen3.6-27B-FP8` を自動選択します。ローカル配置済みの

@@ -20,11 +20,17 @@ set -euo pipefail
 command -v qsub >/dev/null 2>&1 || { echo "ERROR: qsub is unavailable" >&2; exit 1; }
 
 VLLM_CMD="$MIL/.venv_vllm_qwen_10000/bin/vllm"
+VLLM_NINJA="$MIL/.venv_vllm_qwen_10000/bin/ninja"
 VLLM_OMNI_CMD="$MIL/.venv-vllm-omni/bin/vllm"
 VLLM_OMNI_PYTHON="$MIL/.venv-vllm-omni/bin/python"
+VLLM_OMNI_NINJA="$MIL/.venv-vllm-omni/bin/ninja"
 PROJECT_PYTHON="$REPO/.venv/bin/python"
 
-for executable in "$VLLM_CMD" "$VLLM_OMNI_CMD" "$VLLM_OMNI_PYTHON" "$PROJECT_PYTHON"; do
+for executable in \
+    "$VLLM_CMD" "$VLLM_NINJA" \
+    "$VLLM_OMNI_CMD" "$VLLM_OMNI_PYTHON" "$VLLM_OMNI_NINJA" \
+    "$PROJECT_PYTHON"
+do
     [[ -x "$executable" ]] || { echo "ERROR: required executable not found: $executable" >&2; exit 1; }
 done
 
