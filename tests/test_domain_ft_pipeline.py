@@ -41,11 +41,37 @@ def test_all_pipeline_jobs_share_the_same_run_root_default():
         assert expected in read(name)
 
 
-def test_pbs_files_remain_ascii_for_strict_qsub_parsers():
+def test_pbs_jobs_derive_runtime_paths_from_repo_and_miltoka_roots():
+    text = read("run_generate_training_text.pbs")
+    tts = read("run_synthesize_training_audio.pbs")
+    train = read("run_whisper_decoder_train.pbs")
+
+    assert 'REPO="${REPO:-${PBS_O_WORKDIR:-$(pwd)}}"' in text
+    assert 'VLLM_CMD="$MIL/.venv_vllm_qwen_10000/bin/vllm"' in text
+    assert 'CLIENT_PYTHON="$REPO/.venv/bin/python"' in text
+    assert 'VLLM_OMNI_CMD="$MIL/.venv-vllm-omni/bin/vllm"' in tts
+    assert 'VLLM_OMNI_PYTHON="$MIL/.venv-vllm-omni/bin/python"' in tts
+    assert 'TTS_PYTHON="$REPO/.venv/bin/python"' in tts
+    assert 'TRAIN_PYTHON="$REPO/.venv/bin/python"' in train
+
+
+def test_submit_helper_only_requires_three_user_environment_variables():
+    submit = read("submit_whisper_domain_ft.sh")
+
+    assert ': "${REPO:?' in submit
+    assert ': "${MIL:?' in submit
+    assert ': "${PROXY_URL:?' in submit
+    assert "run_$(date +%Y%m%d_%H%M%S)" in submit
+    assert 'depend=afterok:$text_job' in submit
+    assert 'depend=afterok:$tts_job' in submit
+
+
+def test_job_shell_files_remain_ascii_for_strict_qsub_parsers():
     for name in (
         "run_generate_training_text.pbs",
         "run_synthesize_training_audio.pbs",
         "run_whisper_decoder_train.pbs",
+        "submit_whisper_domain_ft.sh",
     ):
         read(name).encode("ascii")
 

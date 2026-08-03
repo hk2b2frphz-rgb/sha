@@ -15,7 +15,10 @@
 # engine explicitly if automatic probing is undesirable.
 
 set -euo pipefail
-cd "${PBS_O_WORKDIR:-$(pwd)}"
+REPO="${REPO:-${PBS_O_WORKDIR:-$(pwd)}}"
+[[ -d "$REPO" ]] || { echo "ERROR: REPO directory not found: $REPO" >&2; exit 1; }
+cd "$REPO"
+MIL="${MIL:-}"
 
 RUN_ROOT="${RUN_ROOT:-out/whisper_domain_ft/default}"
 CORPUS="${CORPUS:-$RUN_ROOT/corpus.jsonl}"
@@ -45,18 +48,25 @@ DEV_RATIO="${DEV_RATIO:-0.10}"
 SEED="${SEED:-42}"
 
 REQUESTED_ENGINE="${TTS_ENGINE:-auto}"
-VLLM_CMD="${VLLM_CMD:-vllm}"
-VLLM_OMNI_CMD="${VLLM_OMNI_CMD:-$VLLM_CMD}"
+if [[ -n "${VLLM_OMNI_CMD:-}" ]]; then
+    VLLM_OMNI_CMD="$VLLM_OMNI_CMD"
+elif [[ -n "$MIL" ]]; then
+    VLLM_OMNI_CMD="$MIL/.venv-vllm-omni/bin/vllm"
+else
+    VLLM_OMNI_CMD="${VLLM_CMD:-vllm}"
+fi
 if [[ -n "${TTS_PYTHON:-}" ]]; then
     TTS_PYTHON="$TTS_PYTHON"
-elif [[ -x .venv/bin/python ]]; then
-    TTS_PYTHON="$PWD/.venv/bin/python"
+elif [[ -x "$REPO/.venv/bin/python" ]]; then
+    TTS_PYTHON="$REPO/.venv/bin/python"
 else
     TTS_PYTHON="python3"
 fi
 PIPELINE_PYTHON="${PIPELINE_PYTHON:-$TTS_PYTHON}"
 if [[ -n "${VLLM_OMNI_PYTHON:-}" ]]; then
     VLLM_OMNI_PYTHON="$VLLM_OMNI_PYTHON"
+elif [[ -n "$MIL" ]]; then
+    VLLM_OMNI_PYTHON="$MIL/.venv-vllm-omni/bin/python"
 elif command -v "$VLLM_OMNI_CMD" >/dev/null 2>&1 && [[ -x "$(dirname "$(command -v "$VLLM_OMNI_CMD")")/python" ]]; then
     VLLM_OMNI_PYTHON="$(dirname "$(command -v "$VLLM_OMNI_CMD")")/python"
 else

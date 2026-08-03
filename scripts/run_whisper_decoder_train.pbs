@@ -11,7 +11,9 @@
 # and atomically publish a CTranslate2 model.  This job never runs TTS.
 
 set -euo pipefail
-cd "${PBS_O_WORKDIR:-$(pwd)}"
+REPO="${REPO:-${PBS_O_WORKDIR:-$(pwd)}}"
+[[ -d "$REPO" ]] || { echo "ERROR: REPO directory not found: $REPO" >&2; exit 1; }
+cd "$REPO"
 
 RUN_ROOT="${RUN_ROOT:-out/whisper_domain_ft/default}"
 TRAIN_MANIFEST="${TRAIN_MANIFEST:-$RUN_ROOT/train_manifest.jsonl}"
@@ -53,8 +55,8 @@ CT2_SMOKE_LOAD="${CT2_SMOKE_LOAD:-1}"
 
 if [[ -n "${TRAIN_PYTHON:-}" ]]; then
     TRAIN_PYTHON="$TRAIN_PYTHON"
-elif [[ -x .venv/bin/python ]]; then
-    TRAIN_PYTHON="$PWD/.venv/bin/python"
+elif [[ -x "$REPO/.venv/bin/python" ]]; then
+    TRAIN_PYTHON="$REPO/.venv/bin/python"
 else
     TRAIN_PYTHON="python3"
 fi

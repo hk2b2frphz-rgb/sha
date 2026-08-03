@@ -15,12 +15,14 @@
 # job will not launch another server.
 #
 # Example:
-#   qsub -v RUN_ROOT=out/domain_ft/run_001 scripts/run_generate_training_text.pbs
-#   qsub -v "RUN_ROOT=out/domain_ft/run_001,LLM_MODEL=/models/Qwen3.6-27B" \
+#   qsub -v "REPO=/path/to/term2speech,MIL=/path/to/miltoka,PROXY_URL=http://proxy:8080" \
 #       scripts/run_generate_training_text.pbs
 
 set -euo pipefail
-cd "${PBS_O_WORKDIR:-$(pwd)}"
+REPO="${REPO:-${PBS_O_WORKDIR:-$(pwd)}}"
+[[ -d "$REPO" ]] || { echo "ERROR: REPO directory not found: $REPO" >&2; exit 1; }
+cd "$REPO"
+MIL="${MIL:-}"
 
 RUN_ROOT="${RUN_ROOT:-out/whisper_domain_ft/default}"
 ANNOTATIONS="${ANNOTATIONS:-data/annotations.tsv}"
@@ -37,11 +39,17 @@ SEED="${SEED:-42}"
 
 # Keep the vLLM runtime separate from the qwen-tts/Whisper project env.  These
 # variables must be executable paths (not shell snippets with spaces).
-VLLM_CMD="${VLLM_CMD:-vllm}"
+if [[ -n "${VLLM_CMD:-}" ]]; then
+    VLLM_CMD="$VLLM_CMD"
+elif [[ -n "$MIL" ]]; then
+    VLLM_CMD="$MIL/.venv_vllm_qwen_10000/bin/vllm"
+else
+    VLLM_CMD="vllm"
+fi
 if [[ -n "${CLIENT_PYTHON:-}" ]]; then
     CLIENT_PYTHON="$CLIENT_PYTHON"
-elif [[ -x .venv/bin/python ]]; then
-    CLIENT_PYTHON="$PWD/.venv/bin/python"
+elif [[ -x "$REPO/.venv/bin/python" ]]; then
+    CLIENT_PYTHON="$REPO/.venv/bin/python"
 else
     CLIENT_PYTHON="python3"
 fi

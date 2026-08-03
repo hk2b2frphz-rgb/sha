@@ -28,32 +28,25 @@ term	reading
 
 ## 実行環境
 
-ランタイムは依存衝突を避けて分けられます。PBSに渡す値はシェル断片ではなく、
-それぞれ実行可能ファイルの絶対パスにしてください。
-
-- `VLLM_CMD`: Qwen3.6用vLLM（公式は `vllm>=0.19.0` を推奨）
-- `CLIENT_PYTHON`: `openai` を持つ軽量Python環境
-- `TTS_PYTHON`: `qwen-tts` を持つPython環境
-- `VLLM_OMNI_CMD`: MiltokaのvLLM-Omni対応 `vllm` 実行ファイル（利用する場合）
-- `VLLM_OMNI_PYTHON`: 上記と同じvLLM-Omni環境のPython（省略時は実行ファイルの隣を探索）
-- `TRAIN_PYTHON`: `pyproject.toml` のWhisper学習環境
-
-`VLLM_CMD` には環境のディレクトリではなく、文章生成用の `vllm` 実行ファイルそのものを
-絶対パスで指定します。Miltokaで既存のQwen文章生成環境を使う場合は、通常は次の場所です。
-`.venv-vllm-omni` はQwen3-TTS用なので、stage 1の指定には使いません。
+利用者が指定する環境変数は次の3つだけです。いずれも投入shellで設定します。
 
 ```bash
-cd /absolute/path/to/miltoka
-VLLM_CMD="$PWD/.venv_vllm_qwen_10000/bin/vllm"
-
-test -x "$VLLM_CMD" || { echo "vLLM executable not found: $VLLM_CMD" >&2; exit 1; }
-"$VLLM_CMD" --version
+export REPO=/absolute/path/to/term2speech
+export MIL=/absolute/path/to/miltoka
+export PROXY_URL='http://user:password%40example@proxy.example.com:8080'
 ```
 
-上の確認に成功したシェルからterm2speechへ移動し、`qsub -v` に
-`VLLM_CMD=$VLLM_CMD` を含めます。環境変数名は大文字で正確に `VLLM_CMD` です。
-`test -x` が失敗する場合はパスの問題ではなく、そのMiltoka checkoutに文章生成用の
-vLLM環境がまだ存在しません。
+PBSと投入helperが残りのパスを次の規則で埋めます。
+
+| 用途 | 自動設定されるパス |
+|---|---|
+| Qwen3.6文章生成 | `$MIL/.venv_vllm_qwen_10000/bin/vllm` |
+| Qwen3-TTS高速合成 | `$MIL/.venv-vllm-omni/bin/vllm` |
+| vLLM-Omni Python | `$MIL/.venv-vllm-omni/bin/python` |
+| client・公式TTS fallback・Whisper学習 | `$REPO/.venv/bin/python` |
+
+文章生成用の`.venv_vllm_qwen_10000`とTTS用の`.venv-vllm-omni`は別環境です。
+投入helperは両方の実行ファイルを検査し、不足していればジョブ投入前に対象パスを表示して停止します。
 
 Qwen3.6-27BのBF16重みだけで約56 GBを使います。stage 1はtensor-parallel対象GPUの
 合計メモリが65 GB未満なら公式の `Qwen/Qwen3.6-27B-FP8` を自動選択します。ローカル配置済みの
@@ -73,7 +66,7 @@ Qwen3-TTSの既定は `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`、日本語ネイ�
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
 - [vLLM-Omni Speech API](https://docs.vllm.ai/projects/vllm-omni/en/stable/serving/speech_api/)
 
-## 3ジョブの投入
+## 3ジョブの投入（推奨）
 
 3本とも `scripts/setup_proxy.sh` をsourceします。proxyはリポジトリへ保存せず、
 `qsub -v` の `PROXY_URL` で渡してください。ユーザー名・パスワードに `@`、`,`、`:`、`/`、`#` が
@@ -89,35 +82,31 @@ qsub -v "PROXY_URL=$PROXY_URL,PROXY_DEBUG=1" scripts/run_net_check.pbs
 疎通結果が出ます。`NO_PROXY`が未設定なら、既存helperの既定値
 `localhost,127.0.0.1,::1` が使われます。
 
-実行ごとに新しい `RUN_ROOT` を推奨します。以下はproxyを明示してPBS依存関係で直列につなぐ例です。
+`annotations.tsv` は通常 `$REPO/data/annotations.tsv` に置きます。そこになければ
+`$REPO/annotations.tsv` も自動検索します。投入helperが時刻付き`RUN_ROOT`を作成し、
+3本のPBSを`afterok`で直列につなぎます。
 
 ```bash
-cd /absolute/path/to/term2speech
-
-REPO="$PWD"
-MIL="/absolute/path/to/miltoka"
-VLLM_CMD="$MIL/.venv_vllm_qwen_10000/bin/vllm"
-CLIENT_PYTHON="$REPO/.venv/bin/python"
-RUN_ROOT="out/whisper_domain_ft/run_$(date +%Y%m%d_%H%M%S)"
-ANNOTATIONS="/absolute/path/to/annotations.tsv"
+export REPO=/absolute/path/to/term2speech
+export MIL=/absolute/path/to/miltoka
 PROXY_URL='http://user:password%40example@proxy.example.com:8080'
+export PROXY_URL
 
-test -x "$VLLM_CMD" || { echo "vLLM executable not found: $VLLM_CMD" >&2; exit 1; }
-"$VLLM_CMD" --version
-
-text_job=$(qsub -v "RUN_ROOT=$RUN_ROOT,ANNOTATIONS=$ANNOTATIONS,PROXY_URL=$PROXY_URL,VLLM_CMD=$VLLM_CMD,CLIENT_PYTHON=$CLIENT_PYTHON" \
-  scripts/run_generate_training_text.pbs)
-
-tts_job=$(qsub -W "depend=afterok:$text_job" \
-  -v "RUN_ROOT=$RUN_ROOT,TTS_ENGINE=auto,PROXY_URL=$PROXY_URL" \
-  scripts/run_synthesize_training_audio.pbs)
-
-train_job=$(qsub -W "depend=afterok:$tts_job" \
-  -v "RUN_ROOT=$RUN_ROOT,PROXY_URL=$PROXY_URL" \
-  scripts/run_whisper_decoder_train.pbs)
-
-printf 'text=%s\ntts=%s\ntrain=%s\n' "$text_job" "$tts_job" "$train_job"
+bash "$REPO/scripts/submit_whisper_domain_ft.sh"
 ```
+
+成功すると、共通出力先と3つのジョブIDが表示されます。
+
+```text
+run_root=/absolute/path/to/term2speech/out/whisper_domain_ft/run_YYYYmmdd_HHMMSS
+text=123.server
+tts=124.server
+train=125.server
+```
+
+proxy内の`,`はPBSの変数区切りと衝突するため、必ず`%2C`へencodeしてください。
+入力や出力先を変更する高度な実行では、`ANNOTATIONS`や`RUN_ROOT`を追加でexportしてから
+同じhelperを実行できます。通常の実行では不要です。
 
 ### stage 1: 学習文生成
 
@@ -125,8 +114,11 @@ printf 'text=%s\ntts=%s\ntrain=%s\n' "$text_job" "$tts_job" "$train_job"
 生成します。vLLMへ並列リクエストを送り、Qwen3.6はnon-thinkingのJSON出力に固定します。
 
 ```bash
-qsub -v "RUN_ROOT=out/domain_run,SENTENCES_PER_TERM=16,REPLAY_RATIO=1.0,VLLM_CMD=$VLLM_CMD,CLIENT_PYTHON=$CLIENT_PYTHON" \
-  scripts/run_generate_training_text.pbs
+# 通常はsubmit_whisper_domain_ft.shがこのstageを投入します。
+# 生成数などを変える場合だけ、投入前に追加設定します。
+export SENTENCES_PER_TERM=16
+export REPLAY_RATIO=1.0
+bash "$REPO/scripts/submit_whisper_domain_ft.sh"
 ```
 
 正例は用語をexactly once含むこと、文長、改行・markup・数字、異常反復、重複を検査します。
@@ -149,17 +141,9 @@ promptなしのfaster-whisperで逆認識し、結果をかな・モーラへ変
 不一致、境界スコア、空認識、ASR例外のいずれでもジョブは停止せず、その1件だけ `tts_text` で再合成します。
 
 ```bash
-# 利用可能ならMiltokaのvLLM-Omniを優先し、不適合なら公式qwen-ttsへfallback
-qsub -v "RUN_ROOT=out/domain_run,TTS_ENGINE=auto" \
-  scripts/run_synthesize_training_audio.pbs
-
-# 明示的に公式qwen-tts batchを使う
-qsub -v "RUN_ROOT=out/domain_run,TTS_ENGINE=qwen_tts,TTS_BATCH_SIZE=4" \
-  scripts/run_synthesize_training_audio.pbs
-
-# 発音確認モデルをローカルCTranslate2ディレクトリへ差し替える
-qsub -v "RUN_ROOT=out/domain_run,PRONUNCIATION_ASR_MODEL=/shared/models/whisper-turbo-ct2" \
-  scripts/run_synthesize_training_audio.pbs
+# 通常はautoです。MiltokaのvLLM-Omniを優先し、不適合なら公式qwen-ttsへfallbackします。
+export TTS_ENGINE=auto
+bash "$REPO/scripts/submit_whisper_domain_ft.sh"
 ```
 
 発音確認の既定は `large-v3-turbo`、V100では `float16` です。判定器をロードできない場合も
@@ -191,8 +175,10 @@ ASRによる確認は、明らかな読み違いをreading fallbackへ回しつ�
 このPBSは常にfull FT＋encoder凍結です。TTS生成を再実行しません。
 
 ```bash
-qsub -v "RUN_ROOT=out/domain_run,EPOCHS=3,LR=5e-6" \
-  scripts/run_whisper_decoder_train.pbs
+# 通常はsubmit_whisper_domain_ft.shが前段成功後に自動実行します。
+export EPOCHS=3
+export LR=5e-6
+bash "$REPO/scripts/submit_whisper_domain_ft.sh"
 ```
 
 既定はA100 2枚（対応時BF16、その他はFP16）、3 epoch、学習率 `5e-6`、label smoothing、weight decay、
