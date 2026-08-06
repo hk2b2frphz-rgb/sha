@@ -85,8 +85,8 @@ class GroupResult:
 def load_annotations(path: Path) -> list[Annotation]:
     """Load a strict UTF-8(-BOM) ``term,reading`` CSV or TSV mapping.
 
-    Every term must occur once.  Both an exact duplicate and reuse with a
-    conflicting reading fail immediately so target quotas remain unambiguous.
+    The first row for each term is authoritative. Later rows for the same term
+    are ignored, including rows that specify a different reading.
     """
 
     try:
@@ -136,17 +136,8 @@ def load_annotations(path: Path) -> list[Annotation]:
             raise CorpusError(f"{path}:{line_no}: term and reading must both be non-empty")
         if any(char in term or char in reading for char in ("\r", "\n", "\t")):
             raise CorpusError(f"{path}:{line_no}: term/reading contains a control separator")
-        previous = by_term.get(term)
-        if previous is not None:
-            previous_reading, previous_line = previous
-            if reading != previous_reading:
-                raise CorpusError(
-                    f"{path}:{line_no}: conflicting reading for {term!r}; "
-                    f"line {previous_line} has {previous_reading!r}, got {reading!r}"
-                )
-            raise CorpusError(
-                f"{path}:{line_no}: duplicate term {term!r}; first seen on line {previous_line}"
-            )
+        if term in by_term:
+            continue
         source_index = len(annotations) + 1
         annotations.append(Annotation(source_index, term, reading))
         by_term[term] = (reading, line_no)

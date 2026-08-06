@@ -57,7 +57,7 @@ def test_load_annotations_accepts_csv_and_quoted_commas(tmp_path: Path):
     ]
 
 
-def test_load_annotations_rejects_exact_duplicate(tmp_path: Path):
+def test_load_annotations_ignores_exact_duplicate(tmp_path: Path):
     path = tmp_path / "annotations.tsv"
     path.write_text(
         "term\treading\n活性汚泥法\tかっせいおでいほう\n"
@@ -65,19 +65,17 @@ def test_load_annotations_rejects_exact_duplicate(tmp_path: Path):
         encoding="utf-8",
     )
 
-    with pytest.raises(CorpusError, match="duplicate term"):
-        load_annotations(path)
+    assert load_annotations(path) == [Annotation(1, "活性汚泥法", "かっせいおでいほう")]
 
 
-def test_load_annotations_rejects_conflicting_duplicate(tmp_path: Path):
+def test_load_annotations_keeps_first_reading_for_conflicting_duplicate(tmp_path: Path):
     path = tmp_path / "annotations.tsv"
     path.write_text(
         "term\treading\n活性汚泥法\tかっせいおでいほう\n活性汚泥法\t別の読み\n",
         encoding="utf-8",
     )
 
-    with pytest.raises(CorpusError, match="conflicting reading"):
-        load_annotations(path)
+    assert load_annotations(path) == [Annotation(1, "活性汚泥法", "かっせいおでいほう")]
 
 
 @pytest.mark.parametrize(
