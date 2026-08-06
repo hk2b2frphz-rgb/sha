@@ -83,7 +83,7 @@ class GroupResult:
 
 
 def load_annotations(path: Path) -> list[Annotation]:
-    """Load a strict UTF-8(-BOM) ``term<TAB>reading`` mapping.
+    """Load a strict UTF-8(-BOM) ``term,reading`` CSV or TSV mapping.
 
     Every term must occur once.  Both an exact duplicate and reuse with a
     conflicting reading fail immediately so target quotas remain unambiguous.
@@ -94,47 +94,65 @@ def load_annotations(path: Path) -> list[Annotation]:
     except OSError as exc:
         raise CorpusError(f"cannot read annotations: {path}: {exc}") from exc
 
+    with handle:
+        lines = handle.readlines()
+
+    header_line = next(
+        (
+            line
+            for line in lines
+            if line.strip() and not line.lstrip().startswith("#")
+        ),
+        "",
+    )
+    if "\t" in header_line:
+        delimiter = "\t"
+    elif "," in header_line:
+        delimiter = ","
+    else:
+        raise CorpusError(f"{path}: missing header 'term<TAB>reading' or 'term,reading'")
+
     annotations: list[Annotation] = []
     by_term: dict[str, tuple[str, int]] = {}
     saw_header = False
-    with handle:
-        for line_no, columns in enumerate(csv.reader(handle, delimiter="\t"), 1):
-            if not columns or all(not value.strip() for value in columns):
-                continue
-            if columns[0].lstrip().startswith("#"):
-                continue
-            if not saw_header:
-                normalized = [value.strip().lower() for value in columns]
-                if normalized != ["term", "reading"]:
-                    raise CorpusError(
-                        f"{path}:{line_no}: expected exactly the header 'term<TAB>reading'"
-                    )
-                saw_header = True
-                continue
-            if len(columns) != 2:
-                raise CorpusError(f"{path}:{line_no}: expected exactly two TSV columns")
-            term, reading = (value.strip() for value in columns)
-            if not term or not reading:
-                raise CorpusError(f"{path}:{line_no}: term and reading must both be non-empty")
-            if any(char in term or char in reading for char in ("\r", "\n", "\t")):
-                raise CorpusError(f"{path}:{line_no}: term/reading contains a control separator")
-            previous = by_term.get(term)
-            if previous is not None:
-                previous_reading, previous_line = previous
-                if reading != previous_reading:
-                    raise CorpusError(
-                        f"{path}:{line_no}: conflicting reading for {term!r}; "
-                        f"line {previous_line} has {previous_reading!r}, got {reading!r}"
-                    )
+    for line_no, columns in enumerate(csv.reader(lines, delimiter=delimiter), 1):
+        if not columns or all(not value.strip() for value in columns):
+            continue
+        if columns[0].lstrip().startswith("#"):
+            continue
+        if not saw_header:
+            normalized = [value.strip().lower() for value in columns]
+            if normalized != ["term", "reading"]:
                 raise CorpusError(
-                    f"{path}:{line_no}: duplicate term {term!r}; first seen on line {previous_line}"
+                    f"{path}:{line_no}: expected exactly the header "
+                    "'term<TAB>reading' or 'term,reading'"
                 )
-            source_index = len(annotations) + 1
-            annotations.append(Annotation(source_index, term, reading))
-            by_term[term] = (reading, line_no)
+            saw_header = True
+            continue
+        if len(columns) != 2:
+            raise CorpusError(f"{path}:{line_no}: expected exactly two columns")
+        term, reading = (value.strip() for value in columns)
+        if not term or not reading:
+            raise CorpusError(f"{path}:{line_no}: term and reading must both be non-empty")
+        if any(char in term or char in reading for char in ("\r", "\n", "\t")):
+            raise CorpusError(f"{path}:{line_no}: term/reading contains a control separator")
+        previous = by_term.get(term)
+        if previous is not None:
+            previous_reading, previous_line = previous
+            if reading != previous_reading:
+                raise CorpusError(
+                    f"{path}:{line_no}: conflicting reading for {term!r}; "
+                    f"line {previous_line} has {previous_reading!r}, got {reading!r}"
+                )
+            raise CorpusError(
+                f"{path}:{line_no}: duplicate term {term!r}; first seen on line {previous_line}"
+            )
+        source_index = len(annotations) + 1
+        annotations.append(Annotation(source_index, term, reading))
+        by_term[term] = (reading, line_no)
 
     if not saw_header:
-        raise CorpusError(f"{path}: missing header 'term<TAB>reading'")
+        raise CorpusError(f"{path}: missing header 'term<TAB>reading' or 'term,reading'")
     if not annotations:
         raise CorpusError(f"{path}: no term/reading rows")
     return annotations

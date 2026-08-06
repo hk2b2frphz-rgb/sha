@@ -3,6 +3,7 @@
 `data/annotations.tsv` の `term`（表記）と `reading`（読み）から学習文と音声を作り、
 `whisper-large-v3-turbo` の **encoderを凍結したままdecoderだけ** fine-tuneし、
 CTranslate2形式まで変換する手順です。評価ジョブは既存のものをそのまま使います。
+入力はタブ区切りTSVとコンマ区切りCSVの両方を受け付けます。
 
 ```text
 annotations.tsv

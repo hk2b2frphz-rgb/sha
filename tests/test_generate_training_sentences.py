@@ -44,6 +44,19 @@ def test_load_annotations_uses_bom_tsv(tmp_path: Path):
     ]
 
 
+def test_load_annotations_accepts_csv_and_quoted_commas(tmp_path: Path):
+    path = tmp_path / "annotations.csv"
+    path.write_text(
+        'term,reading\n活性汚泥法,かっせいおでいほう\n"用語,補足",ようごほそく\n',
+        encoding="utf-8-sig",
+    )
+
+    assert load_annotations(path) == [
+        Annotation(1, "活性汚泥法", "かっせいおでいほう"),
+        Annotation(2, "用語,補足", "ようごほそく"),
+    ]
+
+
 def test_load_annotations_rejects_exact_duplicate(tmp_path: Path):
     path = tmp_path / "annotations.tsv"
     path.write_text(
@@ -72,7 +85,7 @@ def test_load_annotations_rejects_conflicting_duplicate(tmp_path: Path):
     [
         ("term\treading\n\tよみ\n", "non-empty"),
         ("term\treading\n用語\t\n", "non-empty"),
-        ("term,reading\n用語,よみ\n", "header"),
+        ("term,reading,extra\n用語,よみ,extra\n", "header"),
         ("term\treading\textra\n用語\tよみ\textra\n", "header"),
         ("term\treading\n", "no term/reading"),
     ],
