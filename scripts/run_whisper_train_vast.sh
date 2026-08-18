@@ -101,25 +101,25 @@ cd /workspace/repo
 WORK_ROOT=out/whisper_turbo
 mkdir -p "\$WORK_ROOT"
 
-# 合成済みデータがあれば持ってくる。run_whisper_train.pbs は train_manifest.jsonl が
-# 既にあれば step 1 の TTS を丸ごと飛ばすので、これだけで再利用が効く。
-hf download "$DATA_REPO" --repo-type dataset --local-dir "\$WORK_ROOT" || true
-if [ -s "\$WORK_ROOT/train_manifest.jsonl" ]; then
-    echo "[data] 合成済み TTS データを再利用 (TTS をスキップ)"
-else
-    test -s "\$WORK_ROOT/generated_sentences.csv" \
-        || { echo "ERROR: generated_sentences.csv が $DATA_REPO にありません" >&2; exit 1; }
-fi
+# 合成済みデータを取ってくる。TTS は CPU コンテナ側で済ませておく前提なので、
+# ここに無ければ即座に失敗させる (借りた GPU で TTS を回すのが一番もったいない)。
+hf download "$DATA_REPO" --repo-type dataset --local-dir "\$WORK_ROOT"
+test -s "\$WORK_ROOT/train_manifest.jsonl" || {
+    echo "ERROR: train_manifest.jsonl が $DATA_REPO にありません。" >&2
+    echo "       先に CPU 側で: bash scripts/run_cpu_dataprep.sh <csv>" >&2
+    exit 1
+}
+
+# manifest の audio は生成元マシンの絶対パス。このマシンの実体に貼り替える。
+python3 scripts/rebase_manifest_paths.py \
+    --manifest "\$WORK_ROOT/train_manifest.jsonl" \
+    --root "\$WORK_ROOT" --in-place
 
 $ENV_LINES
-export CSV="\$WORK_ROOT/generated_sentences.csv"
 export WORK_ROOT
-
+# train_manifest.jsonl があるので run_whisper_train.pbs は step 1 の TTS を飛ばす。
 bash scripts/run_whisper_train.pbs
 
-# 合成し直した場合だけ、次回のために音声を保存しておく
-hf upload "$DATA_REPO" "\$WORK_ROOT" --repo-type dataset \
-    --include "train_manifest.jsonl" --include "tts_data/**" || true
 hf upload "$OUT_REPO" "\$WORK_ROOT/ct2" --repo-type model
 echo "TRAINING_COMPLETE"
 ONSTART_EOF

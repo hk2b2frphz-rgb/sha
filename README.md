@@ -94,10 +94,49 @@ uv run python scripts/synthesize_speech.py \
 | | `--instruct` | (なし) | 話し方のスタイル指示 |
 | | `--model` | Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice | TTS モデル ID |
 
+## CPU で作って、学習だけ GPU を借りる
+
+GPU を借りるのは学習の数時間だけにして、それ以外は CPU コンテナで完結させる構成。
+
+| 工程 | 実行場所 | 根拠 |
+|---|---|---|
+| 学習文の準備 (`prepare_train_from_csv.py`) | **CPU** | 文字列処理のみ |
+| TTS 合成 (Kokoro-82M) | **CPU** | 82M と小さく、4 vCPU で実時間より速い (約 1.5 秒/文) |
+| manifest 構築・分割 | **CPU** | ファイル処理のみ |
+| **学習 (whisper-large-v3-turbo)** | **GPU (Vast.ai)** | ここだけ GPU が要る |
+| 推論・評価 (`eval_whisper_hf.py`) | **CPU** | RTF 約 3。件数が多ければ GPU でもよい |
+
+```bash
+# 0. 一度だけ: CPU 用 venv (pyproject の cu121 固定とは別に作る)
+bash scripts/setup_cpu_env.sh
+
+# 1. CPU だけでデータ生成 (GPU 不使用)
+bash scripts/run_cpu_dataprep.sh data/generated_sentences.csv
+#    疎通確認なら先頭20件だけ: LIMIT=20 bash scripts/run_cpu_dataprep.sh <csv>
+
+# 2. HF に上げる
+source .venv-cpu/bin/activate
+hf upload <data-repo> out/whisper_turbo --repo-type dataset \
+    --include 'train_manifest.jsonl' --include 'train.jsonl' \
+    --include 'dev.jsonl' --include 'tts_data/**'
+
+# 3. 学習だけ GPU を借りる
+HF_TOKEN=hf_xxx bash scripts/run_whisper_train_vast.sh <data-repo> <out-repo>
+
+# 4. 出来たモデルを CPU で評価
+hf download <out-repo> --local-dir out/ct2
+python scripts/eval_whisper_hf.py --manifest out/whisper_turbo/dev.jsonl \
+    --out-dir out/eval_ft --model-dir out/ct2 --device cpu --dtype float32
+```
+
+学習データは CPU 側で作った絶対パスを含むため、借りたマシン上では
+`rebase_manifest_paths.py` が `audio` を実体に貼り替える (ランナーが自動実行)。
+`train_manifest.jsonl` が data-repo に無ければランナーは即座に失敗する
+— 借りた GPU で TTS を回すのが一番もったいないため。
+
 ## Vast.ai (GPU レンタル)
 
-このリポジトリは GPU を前提とするため、手元に GPU がない場合は
-[Vast.ai](https://vast.ai/) の従量課金 GPU を使う。
+学習だけ [Vast.ai](https://vast.ai/) の従量課金 GPU を使う。
 
 ### セットアップ
 

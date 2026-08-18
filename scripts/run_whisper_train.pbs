@@ -153,7 +153,10 @@ if [[ "${#GPU_IDS[@]}" -lt "$NUM_SHARDS" ]]; then
     echo "ERROR: only ${#GPU_IDS[@]} GPU(s) available but NUM_SHARDS=$NUM_SHARDS" >&2
     exit 1
 fi
-if [[ ! -s "$CSV" ]]; then
+# The CSV is only an input to step 1. When a train manifest already exists that
+# step is skipped, so requiring the CSV there would reject a perfectly valid
+# re-train (e.g. audio built elsewhere and copied in).
+if [[ ! -s "$TRAIN_MANIFEST" || "$FORCE_REBUILD_DATA" == "1" ]] && [[ ! -s "$CSV" ]]; then
     echo "ERROR: CSV is missing or empty: $CSV" >&2
     exit 1
 fi

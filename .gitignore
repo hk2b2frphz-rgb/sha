@@ -5,3 +5,6 @@ out/
 *.wav
 uv.lock
 manifest.txt
+
+# CPU-only venv for data generation / evaluation (see scripts/setup_cpu_env.sh)
+.venv-cpu/
