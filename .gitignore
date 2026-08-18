@@ -15,3 +15,8 @@ manifest.txt
 data/generated_sentences.csv
 data/domain_*
 data/*_private.*
+
+# Third-party checkout for the streaming evaluator (cloned by setup, not ours)
+vendor/
+# Derived from data/test_sentences_100.tsv by build_term_csv/prepare step
+data/test_sentences_100.csv

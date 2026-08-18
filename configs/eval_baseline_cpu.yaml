@@ -1,0 +1,44 @@
+# ベースライン評価: 未学習の whisper-large-v3-turbo (CT2/int8) を CPU で。
+# 音声は評価用100文をKokoro(jm_kumo)で合成したもの。学習用とは別話者。
+dataset:
+  manifest: out/eval_audio/stream_manifest.jsonl
+  audio_dir: out/eval_audio/tts
+
+output:
+  dir: experiments/baseline_turbo
+  predictions_jsonl: predictions.jsonl
+  summary_json: summary.json
+  report_md: report.md
+
+whisper_streaming:
+  repo_dir: vendor/whisper_streaming
+  language: ja
+  task: transcribe
+  backend: faster-whisper
+  min_chunk_size: 1.0
+  buffer_trimming: segment
+  buffer_trimming_sec: 15
+  warmup: true
+  vad: false
+  condition_on_previous_text: false
+  use_initial_prompt: false
+  temperature: 0.0
+  no_speech_threshold: 0.6
+  log_prob_threshold: -1.0
+  compression_ratio_threshold: 2.4
+  repetition_penalty: 1.1
+  no_repeat_ngram_size: 3
+  hallucination_silence_threshold: 2.0
+  max_new_tokens: 192
+
+model:
+  model_dir: out/ct2_base_turbo
+  device: cpu
+  compute_type: int8
+  beam_size: 3
+
+metrics:
+  japanese_word_tokenizer: true
+  repetition_ngram_size: 3
+  # 上下水道の専門用語だけを分母にした B-WER を出す
+  bias_terms: data/test_sentences_100.tsv

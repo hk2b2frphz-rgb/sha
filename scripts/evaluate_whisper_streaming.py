@@ -25,6 +25,51 @@ from eval.asr_text import (  # noqa: E402  (needs the sys.path bootstrap above)
     error_rate,
     normalize_text,
 )
+from eval.biased_wer import BiasedWer, biased_wer  # noqa: E402
+from eval.biased_wer import aggregate as aggregate_biased  # noqa: E402
+
+
+def load_bias_terms(spec: Any) -> list[str]:
+    """metrics.bias_terms を用語リストにする。
+
+    受け付ける形:
+      - 用語を直接並べたリスト
+      - ファイルパス。1行1用語のテキスト、または1列目を用語とみなすTSV/CSV。
+        '#' か '＃' で始まる行は無視する。
+    """
+    if not spec:
+        return []
+    if isinstance(spec, (list, tuple)):
+        return [str(t).strip() for t in spec if str(t).strip()]
+
+    path = Path(str(spec))
+    if not path.exists():
+        raise SystemExit(f"metrics.bias_terms のファイルがありません: {path}")
+
+    rows = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith(("#", "＃"))
+    ]
+    if not rows:
+        raise SystemExit(f"{path} から用語を読めませんでした")
+
+    def split(line: str) -> list[str]:
+        return [c.strip() for c in (line.split("\t") if "\t" in line else line.split(","))]
+
+    # ヘッダに term / word 列があればその列を使う。無ければ1列目。
+    # id 列が先頭にある表を素通しすると "T001" を用語として学習側に渡してしまう。
+    header = [c.lower() for c in split(rows[0])]
+    col = next((i for i, c in enumerate(header) if c in {"term", "word"}), None)
+    if col is None:
+        col, body = 0, rows
+    else:
+        body = rows[1:]
+
+    terms = [cells[col] for line in body if (cells := split(line)) and len(cells) > col and cells[col]]
+    if not terms:
+        raise SystemExit(f"{path} から用語を読めませんでした")
+    return terms
 
 __all__ = [
     "JA_PUNCT_RE",
@@ -378,6 +423,10 @@ def main() -> None:
             asr.transcribe(warm)
 
     tokenizer = JapaneseTokenizer(bool(metrics_cfg.get("japanese_word_tokenizer", True)))
+    # metrics.bias_terms を指定すると B-WER / U-WER も出す。未指定なら従来通り。
+    # 全体WERは専門用語1語を外しても僅かしか動かないので、用語だけを分母にした
+    # B-WER を並べないとドメイン適応の効果が読めない。
+    bias_terms = load_bias_terms(metrics_cfg.get("bias_terms"))
     repetition_ngram_size = int(metrics_cfg.get("repetition_ngram_size", 3))
     if repetition_ngram_size <= 0:
         raise SystemExit("metrics.repetition_ngram_size must be positive")
@@ -407,6 +456,13 @@ def main() -> None:
                 "speed_x": duration / wall if wall else None,
                 "cer": error_rate(ref_chars, hyp_chars),
                 "wer": error_rate(ref_words, hyp_words),
+                **(
+                    biased_wer(
+                        normalize_text(ref), normalize_text(hyp), bias_terms, tokenizer.words
+                    ).as_dict()
+                    if bias_terms
+                    else {}
+                ),
                 "reference_chars": len(ref_chars),
                 "prediction_chars": len(hyp_chars),
                 "char_substitutions": edits["substitutions"],
@@ -450,6 +506,24 @@ def main() -> None:
         "tokenizer": tokenizer.mode,
         "cer": sum(r["cer"] for r in results) / n,
         "wer": sum(r["wer"] for r in results) / n,
+        # 発話ごとの率を平均せず、誤り数と語数を合計してから割る。
+        # 1語しかない短い発話が率を跳ねさせるのを混ぜないため。
+        **(
+            aggregate_biased(
+                BiasedWer(
+                    b_wer=None,
+                    u_wer=None,
+                    wer=None,
+                    b_errors=int(r["b_errors"]),
+                    b_total=int(r["b_total"]),
+                    u_errors=int(r["u_errors"]),
+                    u_total=int(r["u_total"]),
+                )
+                for r in results
+            ).as_dict()
+            if bias_terms
+            else {}
+        ),
         "reference_chars": total_reference_chars,
         "prediction_chars": total_prediction_chars,
         "char_substitutions": total_substitutions,
