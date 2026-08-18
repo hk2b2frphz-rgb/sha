@@ -630,7 +630,11 @@ def main() -> None:
                     from huggingface_hub import HfApi
 
                     self.api = HfApi()
-                    self.api.create_repo(self.repo_id, repo_type="model", exist_ok=True)
+                    # checkpoint からは学習に使った用語が復元できるので非公開で作る。
+                    # 既存 repo の公開設定は変えない (exist_ok 時は private が無視される)。
+                    self.api.create_repo(
+                        self.repo_id, repo_type="model", exist_ok=True, private=True
+                    )
                 self.api.upload_folder(
                     repo_id=self.repo_id,
                     repo_type="model",

@@ -54,9 +54,15 @@ HF_TOKEN=... bash scripts/run_whisper_train_vast.sh <data-repo> <out-repo>
 
 | 対象 | 永続する置き場 |
 |---|---|
-| TTS 音声・manifest | HF dataset repo (`DATA_REPO` 指定で自動退避) |
+| TTS 音声・manifest | `Tsuka25/term2speech-data` (`DATA_REPO` 指定で自動退避) |
 | 学習中の checkpoint | HF `<out-repo>-ckpt` (Vast では既定で有効) |
 | 最終モデル (CT2) | HF model repo |
+
+HF ユーザーは **`Tsuka25`**。upload/download とも検証済み (private repo で往復確認)。
+
+**HF repo は既定で private。** 学習用語は社内用語や未公開の固有名詞であることが多く、
+公開すると用語リストごと読める。学習済みモデルからも用語は復元できる。
+公開したい場合のみ `PRIVATE=0` を明示する。
 
 manifest の `audio` は生成元マシンの絶対パス。別マシンで学習する際は
 `rebase_manifest_paths.py` が貼り替える (ランナーが自動実行)。

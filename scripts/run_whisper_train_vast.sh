@@ -51,6 +51,10 @@ MIXED_PRECISION="${MIXED_PRECISION:-bf16}"
 # 起動時に取り戻して再開する。既定は <out-repo>-ckpt。
 CHECKPOINT_REPO="${CHECKPOINT_REPO:-${OUT_REPO}-ckpt}"
 RESUME="${RESUME:-1}"
+# 学習済みモデルは学習に使った用語を復元できる。既定は非公開。
+PRIVATE="${PRIVATE:-1}"
+PRIVATE_FLAG=""
+[[ "$PRIVATE" == "1" ]] && PRIVATE_FLAG="--private"
 PASSTHROUGH=(FT_MODE FREEZE_ENCODER TTS_BACKEND KOKORO_VOICE KOKORO_MODEL
              TTS_SPEAKER TTS_MODEL TTS_DTYPE EPOCHS LR BATCH_SIZE GRAD_ACCUM
              LORA_R LORA_ALPHA LANGUAGE CT2_QUANT FORCE_REBUILD_DATA PROGRESS_EVERY)
@@ -134,7 +138,7 @@ export WORK_ROOT
 # train_manifest.jsonl があるので run_whisper_train.pbs は step 1 の TTS を飛ばす。
 bash scripts/run_whisper_train.pbs
 
-hf upload "$OUT_REPO" "\$WORK_ROOT/ct2" --repo-type model
+hf upload "$OUT_REPO" "\$WORK_ROOT/ct2" --repo-type model $PRIVATE_FLAG
 echo "TRAINING_COMPLETE"
 ONSTART_EOF
 

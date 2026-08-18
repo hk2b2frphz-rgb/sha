@@ -102,7 +102,12 @@ if [[ -n "${DATA_REPO:-}" ]]; then
     echo ""
     echo "=== HF へ退避: $DATA_REPO ==="
     [[ -n "${HF_TOKEN:-}" ]] || { echo "ERROR: DATA_REPO 指定時は HF_TOKEN が必要です" >&2; exit 1; }
-    hf upload "$DATA_REPO" "$OUT_DIR" --repo-type dataset \
+    # --private 既定: 学習用語は社内用語や未公開の固有名詞であることが多く、
+    # 公開 repo に上げると用語リストごと外部から読める。公開したい場合は
+    # PRIVATE=0 を明示する。
+    PRIVATE_FLAG=()
+    [[ "${PRIVATE:-1}" == "1" ]] && PRIVATE_FLAG=(--private)
+    hf upload "$DATA_REPO" "$OUT_DIR" --repo-type dataset "${PRIVATE_FLAG[@]}" \
         --include "train_manifest.jsonl" \
         --include "train.jsonl" \
         --include "dev.jsonl" \
