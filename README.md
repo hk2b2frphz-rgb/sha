@@ -87,6 +87,54 @@ uv run python scripts/synthesize_speech.py \
 | | `--instruct` | (なし) | 話し方のスタイル指示 |
 | | `--model` | Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice | TTS モデル ID |
 
+## Vast.ai (GPU レンタル)
+
+このリポジトリは GPU を前提とするため、手元に GPU がない場合は
+[Vast.ai](https://vast.ai/) の従量課金 GPU を使う。
+
+### セットアップ
+
+Claude Code on the web のセッションでは `.claude/hooks/session-start.sh` が
+自動で `vastai` CLI を入れ、`VAST_API_KEY` を設定する。手動で入れる場合:
+
+```bash
+pip install --user vastai
+export PATH="$HOME/.local/bin:$PATH"
+vastai set api-key "$VAST_API_KEY"
+vastai show user            # 疎通確認 (残高・アカウント情報)
+```
+
+`VAST_API_KEY` はリポジトリにコミットせず、claude.ai/code の
+environment settings に環境変数として登録する。
+
+### インスタンスを借りる
+
+Whisper large-v3 の LoRA fine tuning なら VRAM 24GB あれば足りる。
+**bfloat16 対応の RTX 3090 (Ampere) / 4090 (Ada) を選ぶこと。**
+T4 (Turing) と V100 は bf16 非対応で、fp16 学習は勾配が NaN に飛びやすい。
+
+```bash
+# 安い順に検索 (2026-08 時点で RTX 3090 が $0.11/hr 前後)
+vastai search offers 'gpu_name in [RTX_3090,RTX_4090] num_gpus=1 disk_space>=100 rentable=true' -o 'dph+'
+
+# 借りる (ID は上の検索結果から)
+vastai create instance <OFFER_ID> \
+    --image pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel \
+    --disk 100 --ssh
+
+vastai show instances       # 状態と SSH 接続先を確認
+vastai ssh-url <INSTANCE_ID>
+```
+
+**課金はインスタンスが起動している間ずっと発生する。終わったら必ず破棄する:**
+
+```bash
+vastai destroy instance <INSTANCE_ID>
+```
+
+`vastai stop instance` は停止するだけでディスク課金が残るので、
+使い終わったら `destroy` を使う。
+
 ## 環境診断 (トラブルシューティング)
 
 CUDA / torch / qwen-tts まわりのエラー (libcudart が開けない等) が出たら、
