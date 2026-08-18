@@ -60,6 +60,10 @@ HF_TOKEN=... bash scripts/run_whisper_train_vast.sh <data-repo> <out-repo>
 
 HF ユーザーは **`Tsuka25`**。upload/download とも検証済み (private repo で往復確認)。
 
+`HF_TOKEN` は environment settings 済み。**明示的な `hf auth login` は不要** —
+huggingface_hub が環境変数を直接読むので、読み書きとも通る (検証済み)。
+session-start hook は `hf` コマンドを入れるだけでよい。
+
 **HF repo は既定で private。** 学習用語は社内用語や未公開の固有名詞であることが多く、
 公開すると用語リストごと読める。学習済みモデルからも用語は復元できる。
 公開したい場合のみ `PRIVATE=0` を明示する。

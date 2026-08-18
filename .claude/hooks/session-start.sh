@@ -6,7 +6,11 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-pip install --quiet --user vastai
+# huggingface_hub ships the `hf` command in the base package since 1.x (the
+# [cli] extra was dropped and now only warns). HF_TOKEN, set on the cloud
+# environment, is read straight from the environment by huggingface_hub, so no
+# login step is needed here -- the CLI just has to exist before .venv-cpu does.
+pip install --quiet --user vastai huggingface_hub
 
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
