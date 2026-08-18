@@ -88,8 +88,11 @@ manifest の `audio` は生成元マシンの絶対パス。別マシンで学�
 ```bash
 npm install -g @openai/codex
 codex login --device-auth        # コードを表示 → ブラウザで承認 (ヘッドレス可)
-codex exec --skip-git-repo-check "..."
+codex exec --skip-git-repo-check -m gpt-5.6-sol "..."
 ```
+
+**モデルは `gpt-5.6-sol` を指定する。** フラグシップ (最も賢い) モデル。
+`-m` を省略すると既定モデルになり sol より弱いので、重要な作業では必ず指定する。
 
 `codex login` のブラウザ認証は使えないが `--device-auth` は使える。
 認証情報は `~/.codex/auth.json` に入り、**セッションが切れると消える**。
