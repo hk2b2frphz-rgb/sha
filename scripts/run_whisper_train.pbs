@@ -66,6 +66,12 @@ FREEZE_ENCODER="${FREEZE_ENCODER:-1}"
 
 CSV="${CSV:-data/generated_sentences.csv}"
 BASE_MODEL_FILE="${BASE_MODEL_FILE:-manifest.txt}"
+# BASE_MODEL bypasses manifest.txt entirely (HF id or local path). Useful where
+# there is no prepared manifest.txt, e.g. a freshly rented cloud GPU.
+BASE_MODEL="${BASE_MODEL:-}"
+# V100 (the default xvn_s node) has no bf16, hence fp16 here. On Ampere/Ada
+# pass MIXED_PRECISION=bf16, which trains the same but without loss scaling.
+MIXED_PRECISION="${MIXED_PRECISION:-fp16}"
 WORK_ROOT="${WORK_ROOT:-out/whisper_turbo}"
 TTS_INPUT="${TTS_INPUT:-$WORK_ROOT/tts_input.jsonl}"
 DATA_ROOT="${DATA_ROOT:-$WORK_ROOT/tts_data}"
@@ -125,7 +131,7 @@ IFS=',' read -r -a GPU_IDS <<< "$CUDA_VISIBLE_DEVICES"
 echo "===== whisper-large-v3-turbo train (mode=$FT_MODE) ====="
 echo "host:            $(hostname)"
 echo "csv:             $CSV"
-echo "base_model_file: $BASE_MODEL_FILE"
+echo "base_model:      ${BASE_MODEL:-(from $BASE_MODEL_FILE)}"
 echo "train_manifest:  $TRAIN_MANIFEST"
 echo "train_out:       $ADAPTER_ROOT"
 echo "merged_dir:      $MERGED_DIR"
@@ -307,11 +313,16 @@ else
     TRAIN_FLAGS+=(--lora-r "$LORA_R" --lora-alpha "$LORA_ALPHA")
 fi
 
+if [[ -n "$BASE_MODEL" ]]; then
+    TRAIN_FLAGS+=(--base-model "$BASE_MODEL")
+else
+    TRAIN_FLAGS+=(--base-model-file "$BASE_MODEL_FILE")
+fi
+
 echo "===== step 2/4: $FT_MODE fine-tune (${NUM_SHARDS}-GPU DDP) ====="
-uv run accelerate launch --num_processes "$NUM_SHARDS" --mixed_precision fp16 \
+uv run accelerate launch --num_processes "$NUM_SHARDS" --mixed_precision "$MIXED_PRECISION" \
     scripts/train_whisper_lora.py \
     --manifest "$TRAIN_MANIFEST" \
-    --base-model-file "$BASE_MODEL_FILE" \
     --out-dir "$ADAPTER_ROOT" \
     --merge-dir "$MERGED_DIR" \
     --language "$LANGUAGE" \

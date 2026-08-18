@@ -114,29 +114,57 @@ vastai show user            # 疎通確認 (残高・アカウント情報)
 `VAST_API_KEY` はリポジトリにコミットせず、claude.ai/code の
 environment settings に環境変数として登録する。
 
-### インスタンスを借りる
+### Whisper FT を Vast.ai で回す
 
-Whisper large-v3 の LoRA fine tuning なら VRAM 24GB あれば足りる。
-**bfloat16 対応の RTX 3090 (Ampere) / 4090 (Ada) を選ぶこと。**
-T4 (Turing) と V100 は bf16 非対応で、fp16 学習は勾配が NaN に飛びやすい。
+`run_whisper_train.pbs` を借りた GPU 上でそのまま実行するラッパ
+`scripts/run_whisper_train_vast.sh` を使う。学習の中身は複製していないので、
+`FT_MODE` / `FREEZE_ENCODER` / `EPOCHS` / `LR` などは PBS 版と同じ意味。
 
 ```bash
-# 安い順に検索 (2026-08 時点で RTX 3090 が $0.11/hr 前後)
-vastai search offers 'gpu_name in [RTX_3090,RTX_4090] num_gpus=1 disk_space>=100 rentable=true' -o 'dph+'
+export HF_TOKEN=hf_xxx    # データ取得と結果アップロードに使う
 
-# 借りる (ID は上の検索結果から)
-vastai create instance <OFFER_ID> \
-    --image pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel \
-    --disk 100 --ssh
+# まず価格だけ確認 (課金なし)
+DRY_RUN=1 bash scripts/run_whisper_train_vast.sh <hf-data-repo> <hf-out-repo>
 
-vastai show instances       # 状態と SSH 接続先を確認
-vastai ssh-url <INSTANCE_ID>
+# 実行 (既定: full-FT, encoder 凍結)
+bash scripts/run_whisper_train_vast.sh me/turbo-tts me/whisper-turbo-ft
+
+# LoRA に切替、上限2時間
+FT_MODE=lora MAX_HOURS=2 bash scripts/run_whisper_train_vast.sh me/d me/m
 ```
 
-**課金はインスタンスが起動している間ずっと発生する。終わったら必ず破棄する:**
+第1引数の HF dataset repo が入出力の置き場になる。
+
+| ファイル | 役割 |
+|---|---|
+| `generated_sentences.csv` | 学習文の入力 (初回に必要) |
+| `train_manifest.jsonl`, `tts_data/` | 合成済み音声。初回実行後に自動アップロードされる |
+
+**2 回目以降は TTS を丸ごとスキップする。** `run_whisper_train.pbs` は
+`train_manifest.jsonl` があれば step 1 を飛ばす作りなので、合成音声を
+HF に置いておけばハイパラ変更だけの再学習が一番重い工程を省ける。
+
+| 環境変数 | 既定値 | 説明 |
+|---|---|---|
+| `MAX_HOURS` | 4 | ローカル監視側の上限。超過で破棄 |
+| `MAX_DPH` | 0.25 | この $/hr を超える提示は借りない (超過時 exit 1) |
+| `GPU` | RTX_3090,RTX_4090 | bf16 対応カードのみ |
+| `NUM_SHARDS` | 1 | 枚数を増やすと固定作業 (image pull/uv sync/モデルDL) も枚数分課金される |
+| `MIXED_PRECISION` | bf16 | PBS 既定の V100 は bf16 非対応なので、そちらは fp16 のまま |
+| `SPOT` | 0 | 1 で interruptible 入札 (約 15% 安いが中断あり) |
+| `DRY_RUN` | 0 | 1 で提示価格を表示して終了 |
+
+**インスタンスは全ての終了経路で destroy される** — 正常終了・エラー・Ctrl-C・
+ローカル締切のいずれでも。放置された GPU が一番の出費になるため
+(`$0.11/h` × 一晩 12 時間 ≈ 残高 $10 の 13%)。
+
+### 手動で借りる場合
 
 ```bash
-vastai destroy instance <INSTANCE_ID>
+vastai search offers 'gpu_name in [RTX_3090,RTX_4090] num_gpus=1 rentable=true' -o 'dph+'
+vastai create instance <OFFER_ID> --image pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel --disk 60 --ssh
+vastai show instances
+vastai destroy instance <INSTANCE_ID>    # 終わったら必ず
 ```
 
 `vastai stop instance` は停止するだけでディスク課金が残るので、
