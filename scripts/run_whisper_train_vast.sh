@@ -42,8 +42,15 @@ IMAGE="${IMAGE:-pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel}"
 
 # --- run_whisper_train.pbs にそのまま渡す変数 ---
 NUM_SHARDS="${NUM_SHARDS:-1}"
+# run_whisper_train.pbs と同じ既定。checkpoint の置き場 (ADAPTER_ROOT) が
+# WORK_ROOT/$FT_MODE なので、こちら側でも確定させておく必要がある。
+FT_MODE="${FT_MODE:-full}"
 BASE_MODEL="${BASE_MODEL:-openai/whisper-large-v3-turbo}"
 MIXED_PRECISION="${MIXED_PRECISION:-bf16}"
+# 借りたマシンは終了時に破棄されるので、checkpoint は毎回 HF へ退避し、
+# 起動時に取り戻して再開する。既定は <out-repo>-ckpt。
+CHECKPOINT_REPO="${CHECKPOINT_REPO:-${OUT_REPO}-ckpt}"
+RESUME="${RESUME:-1}"
 PASSTHROUGH=(FT_MODE FREEZE_ENCODER TTS_BACKEND KOKORO_VOICE KOKORO_MODEL
              TTS_SPEAKER TTS_MODEL TTS_DTYPE EPOCHS LR BATCH_SIZE GRAD_ACCUM
              LORA_R LORA_ALPHA LANGUAGE CT2_QUANT FORCE_REBUILD_DATA PROGRESS_EVERY)
@@ -80,6 +87,7 @@ echo "MAX_HOURS=$MAX_HOURS 時点の最悪支出: \$$(python3 -c "print(f'{$OFFE
 
 # PBS 版と同じ変数を、呼び出し側で設定されているものだけ引き継ぐ
 ENV_LINES="export BASE_MODEL='$BASE_MODEL' MIXED_PRECISION='$MIXED_PRECISION' NUM_SHARDS='$NUM_SHARDS'"
+ENV_LINES="$ENV_LINES CHECKPOINT_REPO='$CHECKPOINT_REPO' RESUME='$RESUME'"
 for v in "${PASSTHROUGH[@]}"; do
     [[ -n "${!v:-}" ]] && ENV_LINES="$ENV_LINES $v='${!v}'"
 done
@@ -114,6 +122,12 @@ test -s "\$WORK_ROOT/train_manifest.jsonl" || {
 python3 scripts/rebase_manifest_paths.py \
     --manifest "\$WORK_ROOT/train_manifest.jsonl" \
     --root "\$WORK_ROOT" --in-place
+
+# 前回が中断されていれば checkpoint を取り戻す (無ければ何も起きない)。
+# 置き場は ADAPTER_ROOT=\$WORK_ROOT/\$FT_MODE で、そこの trainer/ を見て再開する。
+hf download "$CHECKPOINT_REPO" --local-dir "\$WORK_ROOT/$FT_MODE" 2>/dev/null \
+    && echo "[ckpt] 前回の checkpoint を取得した" \
+    || echo "[ckpt] 既存 checkpoint なし (新規学習)"
 
 $ENV_LINES
 export WORK_ROOT

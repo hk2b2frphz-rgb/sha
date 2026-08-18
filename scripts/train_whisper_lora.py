@@ -238,7 +238,37 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-label-len", type=int, default=225, help="ラベルtoken上限 (whisperは448)")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--checkpoint-repo",
+        default=None,
+        help="checkpoint を保存の度に push する HF repo id。"
+        "使い捨てのGPUを借りて学習する場合、これが無いと中断で全部消える",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="--out-dir に checkpoint があればそこから再開する",
+    )
     return parser.parse_args()
+
+
+def latest_checkpoint(out_dir: Path) -> Path | None:
+    """``out_dir/trainer`` にある checkpoint-N のうち N が最大のものを返す。"""
+    trainer_dir = Path(out_dir) / "trainer"
+    if not trainer_dir.is_dir():
+        return None
+    best: Path | None = None
+    best_step = -1
+    for path in trainer_dir.glob("checkpoint-*"):
+        if not path.is_dir():
+            continue
+        try:
+            step = int(path.name.rsplit("-", 1)[-1])
+        except ValueError:
+            continue
+        if step > best_step:
+            best_step, best = step, path
+    return best
 
 
 def resolve_base_model(args: argparse.Namespace) -> str:
@@ -576,6 +606,43 @@ def main() -> None:
                 control.should_training_stop = True
             return control
 
+    class CheckpointSyncCallback(TrainerCallback):
+        """書き終わった checkpoint を HF へ退避する。
+
+        借りた GPU は学習が終わると破棄されるので、ローカルにしか checkpoint が
+        無いと中断＝やり直しになる。on_save は Trainer が checkpoint を書き終えた
+        後に呼ばれるため、書きかけを送ってしまう心配がない。
+        """
+
+        def __init__(self, repo_id: str, out_dir: Path) -> None:
+            self.repo_id = repo_id
+            self.out_dir = out_dir
+            self.api: Any = None
+
+        def on_save(self, args_, state, control, **kwargs):  # noqa: ANN001
+            if not state.is_world_process_zero:
+                return control
+            checkpoint = latest_checkpoint(self.out_dir)
+            if checkpoint is None:
+                return control
+            try:
+                if self.api is None:
+                    from huggingface_hub import HfApi
+
+                    self.api = HfApi()
+                    self.api.create_repo(self.repo_id, repo_type="model", exist_ok=True)
+                self.api.upload_folder(
+                    repo_id=self.repo_id,
+                    repo_type="model",
+                    folder_path=str(checkpoint),
+                    path_in_repo=f"trainer/{checkpoint.name}",
+                )
+                print(f"[train] checkpoint pushed: {checkpoint.name} -> {self.repo_id}", flush=True)
+            except Exception as exc:  # noqa: BLE001
+                # 退避に失敗しても学習は続ける。ここで落とすと本末転倒。
+                print(f"[train] WARNING: checkpoint push failed ({exc})", flush=True)
+            return control
+
     adapter_dir = args.out_dir / "adapter"
     cuda_available = bool(torch.cuda.is_available())
     bf16_supported = bool(
@@ -644,7 +711,14 @@ def main() -> None:
         time_budget = TimeBudgetCallback(args.max_train_seconds)
         trainer.add_callback(time_budget)
         print(f"[train] wall-clock training budget: {args.max_train_seconds:.0f}s")
-    trainer.train()
+    if args.checkpoint_repo:
+        trainer.add_callback(CheckpointSyncCallback(args.checkpoint_repo, args.out_dir))
+        print(f"[train] checkpoints will be pushed to {args.checkpoint_repo}")
+
+    resume_from = latest_checkpoint(args.out_dir) if args.resume else None
+    if resume_from is not None:
+        print(f"[train] resuming from {resume_from}")
+    trainer.train(resume_from_checkpoint=resume_from)
     if has_dev and trainer.state.best_model_checkpoint:
         print(
             "[train] restored best dev-CER checkpoint: "

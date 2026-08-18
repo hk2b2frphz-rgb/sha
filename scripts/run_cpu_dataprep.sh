@@ -93,11 +93,31 @@ python scripts/split_whisper_manifest.py \
     --seed "$SEED"
 
 echo ""
-echo "=== 完了 (GPU 未使用) ==="
+echo "=== 生成完了 (GPU 未使用) ==="
 echo "train_manifest: $TRAIN_MANIFEST  ($(grep -c . "$TRAIN_MANIFEST") 行)"
 echo "wav:            $TTS_OUT/wav"
-echo ""
-echo "次: HF にアップロードして学習だけ GPU を借りる"
-echo "  hf upload <data-repo> $OUT_DIR --repo-type dataset \\"
-echo "      --include 'train_manifest.jsonl' --include 'train.jsonl' --include 'dev.jsonl' --include 'tts_data/**'"
-echo "  HF_TOKEN=hf_xxx bash scripts/run_whisper_train_vast.sh <data-repo> <out-repo>"
+
+# ---- 退避: このコンテナは使い捨てなので、置いたままだとセッション終了で消える ----
+if [[ -n "${DATA_REPO:-}" ]]; then
+    echo ""
+    echo "=== HF へ退避: $DATA_REPO ==="
+    [[ -n "${HF_TOKEN:-}" ]] || { echo "ERROR: DATA_REPO 指定時は HF_TOKEN が必要です" >&2; exit 1; }
+    hf upload "$DATA_REPO" "$OUT_DIR" --repo-type dataset \
+        --include "train_manifest.jsonl" \
+        --include "train.jsonl" \
+        --include "dev.jsonl" \
+        --include "tts_data/**"
+    echo "退避完了: https://huggingface.co/datasets/$DATA_REPO"
+    echo ""
+    echo "次: 学習だけ GPU を借りる"
+    echo "  HF_TOKEN=\$HF_TOKEN bash scripts/run_whisper_train_vast.sh $DATA_REPO <out-repo>"
+else
+    echo ""
+    echo "!! 警告: このコンテナは使い捨てで、セッションが切れると $OUT_DIR は消えます。"
+    echo "   合成し直すと同じ時間がかかるので、必ず HF へ退避してください:"
+    echo "     DATA_REPO=<data-repo> HF_TOKEN=hf_xxx bash scripts/run_cpu_dataprep.sh $CSV"
+    echo "   すでに生成済みなら手動で:"
+    echo "     hf upload <data-repo> $OUT_DIR --repo-type dataset \\"
+    echo "         --include 'train_manifest.jsonl' --include 'train.jsonl' \\"
+    echo "         --include 'dev.jsonl' --include 'tts_data/**'"
+fi

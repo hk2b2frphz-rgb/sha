@@ -72,6 +72,10 @@ BASE_MODEL="${BASE_MODEL:-}"
 # V100 (the default xvn_s node) has no bf16, hence fp16 here. On Ampere/Ada
 # pass MIXED_PRECISION=bf16, which trains the same but without loss scaling.
 MIXED_PRECISION="${MIXED_PRECISION:-fp16}"
+# Off by default: on a persistent cluster the checkpoints under $ADAPTER_ROOT
+# survive on shared storage and need no offsite copy.
+CHECKPOINT_REPO="${CHECKPOINT_REPO:-}"
+RESUME="${RESUME:-0}"
 WORK_ROOT="${WORK_ROOT:-out/whisper_turbo}"
 TTS_INPUT="${TTS_INPUT:-$WORK_ROOT/tts_input.jsonl}"
 DATA_ROOT="${DATA_ROOT:-$WORK_ROOT/tts_data}"
@@ -320,6 +324,16 @@ if [[ -n "$BASE_MODEL" ]]; then
     TRAIN_FLAGS+=(--base-model "$BASE_MODEL")
 else
     TRAIN_FLAGS+=(--base-model-file "$BASE_MODEL_FILE")
+fi
+
+# On a rented box the machine is destroyed when the job ends, so a checkpoint
+# that only exists locally is lost on any interruption. CHECKPOINT_REPO pushes
+# each completed checkpoint to the Hub; RESUME picks the newest one back up.
+if [[ -n "$CHECKPOINT_REPO" ]]; then
+    TRAIN_FLAGS+=(--checkpoint-repo "$CHECKPOINT_REPO")
+fi
+if [[ "$RESUME" == "1" ]]; then
+    TRAIN_FLAGS+=(--resume)
 fi
 
 echo "===== step 2/4: $FT_MODE fine-tune (${NUM_SHARDS}-GPU DDP) ====="

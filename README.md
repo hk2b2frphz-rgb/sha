@@ -134,6 +134,31 @@ python scripts/eval_whisper_hf.py --manifest out/whisper_turbo/dev.jsonl \
 `train_manifest.jsonl` が data-repo に無ければランナーは即座に失敗する
 — 借りた GPU で TTS を回すのが一番もったいないため。
 
+### データと checkpoint の保管場所
+
+**このコンテナも借りた GPU も使い捨てで、終了すると中身は消える。**
+残したいものは必ず HF に置く。
+
+| 対象 | 一時的な置き場 | 永続する置き場 |
+|---|---|---|
+| TTS 音声・manifest | コンテナの `out/whisper_turbo/` | HF dataset repo |
+| 学習中の checkpoint | 借りたマシンの `out/whisper_turbo/<mode>/trainer/` | HF `<out-repo>-ckpt` |
+| 最終モデル (CT2) | 借りたマシンの `out/whisper_turbo/ct2/` | HF model repo |
+
+データは `DATA_REPO` を渡せば生成後に自動退避される。**指定しないと合成結果は
+セッション終了で消える**ので、基本は付けて実行する。
+
+```bash
+DATA_REPO=<data-repo> HF_TOKEN=hf_xxx bash scripts/run_cpu_dataprep.sh <csv>
+```
+
+checkpoint は Vast.ai ランナーでは既定で有効 (`CHECKPOINT_REPO=<out-repo>-ckpt`,
+`RESUME=1`)。保存の度に HF へ push し、次回起動時に取り戻して再開する。
+spot 中断・`MAX_HOURS` 超過・エラー終了のいずれでも進捗が残る。
+
+PBS クラスタ側は共有ストレージに checkpoint が残るため既定で無効。必要なら
+`qsub -v CHECKPOINT_REPO=me/model-ckpt,RESUME=1 scripts/run_whisper_train.pbs`。
+
 ## Vast.ai (GPU レンタル)
 
 学習だけ [Vast.ai](https://vast.ai/) の従量課金 GPU を使う。
