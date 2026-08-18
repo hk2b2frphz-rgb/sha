@@ -84,6 +84,18 @@ codex exec --skip-git-repo-check "..."
 `codex login` のブラウザ認証は使えないが `--device-auth` は使える。
 認証情報は `~/.codex/auth.json` に入り、**セッションが切れると消える**。
 
+毎回の認証を省くには environment settings に登録する。session-start hook が復元する。
+
+| 変数 | 中身 | 寿命 |
+|---|---|---|
+| `CODEX_AUTH_JSON` (推奨) | `base64 -w0 ~/.codex/auth.json` | refresh token を含むので自動更新される |
+| `CODEX_ACCESS_TOKEN` | `tokens.access_token` のみ | **約10日で失効** |
+
+```bash
+# 手元の codex でログイン済みのマシンで実行し、出力を environment settings へ
+base64 -w0 ~/.codex/auth.json        # macOS は base64 -i ~/.codex/auth.json
+```
+
 ## Claude の使用量
 
 - セッション単位のコスト・トークン: **取得できる** (`claude -p ... --output-format json`

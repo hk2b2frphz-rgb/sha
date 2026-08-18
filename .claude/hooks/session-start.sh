@@ -26,6 +26,18 @@ fi
 if ! command -v codex >/dev/null 2>&1; then
   npm install -g @openai/codex >/dev/null 2>&1 || true
 fi
-if [ -n "${CODEX_ACCESS_TOKEN:-}" ] && command -v codex >/dev/null 2>&1; then
+# CODEX_AUTH_JSON is base64 of a whole ~/.codex/auth.json. Preferred over
+# CODEX_ACCESS_TOKEN because it carries the refresh token too, so Codex renews
+# itself instead of dying with the ~10 day access-token lifetime.
+if [ -n "${CODEX_AUTH_JSON:-}" ]; then
+  mkdir -p "$HOME/.codex"
+  if printf '%s' "$CODEX_AUTH_JSON" | base64 -d > "$HOME/.codex/auth.json.tmp" 2>/dev/null \
+     && [ -s "$HOME/.codex/auth.json.tmp" ]; then
+    mv "$HOME/.codex/auth.json.tmp" "$HOME/.codex/auth.json"
+    chmod 600 "$HOME/.codex/auth.json"
+  else
+    rm -f "$HOME/.codex/auth.json.tmp"
+  fi
+elif [ -n "${CODEX_ACCESS_TOKEN:-}" ] && command -v codex >/dev/null 2>&1; then
   printf '%s' "$CODEX_ACCESS_TOKEN" | codex login --with-access-token >/dev/null 2>&1 || true
 fi
