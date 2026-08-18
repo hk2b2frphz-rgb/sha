@@ -8,3 +8,10 @@ manifest.txt
 
 # CPU-only venv for data generation / evaluation (see scripts/setup_cpu_env.sh)
 .venv-cpu/
+
+# Domain term inputs. This repository is public, and the training corpus is a
+# list of the exact terms being adapted for, so it must not be committed here.
+# Keep it in the private HF dataset repo instead (see CLAUDE.md).
+data/generated_sentences.csv
+data/domain_*
+data/*_private.*
