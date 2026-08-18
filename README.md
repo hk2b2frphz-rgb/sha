@@ -15,9 +15,12 @@ terms.txt (1 行 1 用語) ← 手書きのリストでも OK
 sentences.jsonl  {"id", "term", "sentence"}
    ↓ scripts/synthesize_speech.py    (Qwen3-TTS)
 out/audio/wav/*.wav + manifest.jsonl (正解テキスト付き)
+   ↓ scripts/finetune_whisper.py     (Whisper large-v3 を LoRA で追加学習)
+out/whisper-ft/ct2/ (faster-whisper でそのまま読める)
 ```
 
 manifest.jsonl が ASR テストの正解 (リファレンス) になる。
+同じものを教師データとして Whisper の fine tuning にも使える。
 
 ## セットアップ
 
@@ -134,6 +137,70 @@ vastai destroy instance <INSTANCE_ID>
 
 `vastai stop instance` は停止するだけでディスク課金が残るので、
 使い終わったら `destroy` を使う。
+
+## Whisper の fine tuning
+
+`manifest.jsonl` を教師データに Whisper large-v3 を LoRA で追加学習し、
+faster-whisper (CTranslate2) 形式まで書き出す。
+
+```bash
+# GPU のあるマシンで直接
+python scripts/finetune_whisper.py \
+    --manifest out/audio/manifest.jsonl \
+    --out-dir out/whisper-ft \
+    --max-hours 3 --ct2
+```
+
+出力は `out/whisper-ft/` 以下:
+
+| パス | 中身 |
+|---|---|
+| `adapter/` | LoRA アダプタのみ (数十 MB) |
+| `merged/` | ベースモデルに統合済みの HF モデル |
+| `ct2/` | faster-whisper でそのまま読める形式 (`--ct2` 指定時) |
+
+### GPU 時間を削るための既定値
+
+借りた GPU で回す前提なので、既定値は精度より請求額を優先している。
+
+| 設定 | 理由 |
+|---|---|
+| **エンコーダ凍結** | 用語適応はデコーダ側が効く。逆伝播を省いて 1 step 約 35% 短縮 |
+| **LoRA (decoder q/v)** | 学習対象は全パラメータの 1% 未満 |
+| **bf16・量子化なし** | large-v3 は約 3 GB。24 GB カードで 8bit 化しても脱量子化の分だけ遅くなる |
+| **log-mel を都度計算** | 特徴量キャッシュ数十 GB のディスク課金を回避。DataLoader が GPU と重ねて処理 |
+| `--max-hours` | 壁時計で強制終了。請求額の上限を保証する |
+| `--resume` | spot インスタンスが飛ばされても再開できる |
+
+精度を優先する場合は `--train-encoder` を付ける (その分 GPU 時間が伸びる)。
+
+### Vast.ai で回す (借りて・学習して・自動で返す)
+
+```bash
+export HF_TOKEN=hf_xxx    # データ取得と結果アップロードに使う
+
+# まず価格だけ確認 (課金なし)
+DRY_RUN=1 bash scripts/vast_train.sh <hf-dataset-repo> <hf-output-repo>
+
+# 実行
+MAX_HOURS=3 bash scripts/vast_train.sh myname/term2speech-audio myname/whisper-ja-terms
+```
+
+**インスタンスは全ての終了経路で destroy される** — 正常終了・学習失敗・Ctrl-C・
+ローカルのタイムアウトのいずれでも。放置された GPU が一番の出費になるため
+(`$0.11/h` × 一晩 12 時間 ≈ 残高 $10 の 13%)。
+
+| 環境変数 | 既定値 | 説明 |
+|---|---|---|
+| `MAX_HOURS` | 3 | 学習側とローカル監視側の両方に効く上限 |
+| `MAX_DPH` | 0.20 | この $/hr を超える提示は借りない (超過時は exit 1) |
+| `GPU` | RTX_3090,RTX_4090 | bf16 対応カードのみ。T4/V100 は除外 |
+| `SPOT` | 0 | 1 で interruptible 入札 (約 15% 安いが中断あり) |
+| `DISK` | 40 | GB。large-v3 と出力には十分 |
+| `DRY_RUN` | 0 | 1 で提示価格を表示して終了 |
+
+学習結果は HF Hub にアップロードされてからインスタンスが破棄される。
+2026-08 時点の実測で RTX 3090 が **$0.099/hr**、`MAX_HOURS=3` なら最悪 **$0.30**。
 
 ## 環境診断 (トラブルシューティング)
 
