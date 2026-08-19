@@ -13,6 +13,7 @@ manifest.txt
 # list of the exact terms being adapted for, so it must not be committed here.
 # Keep it in the private HF dataset repo instead (see CLAUDE.md).
 data/generated_sentences.csv
+data/generated_sentences_*.csv
 data/domain_*
 data/*_private.*
 
