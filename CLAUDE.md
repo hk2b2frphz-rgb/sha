@@ -153,3 +153,26 @@ train loss 0.0046 まで落ちた (=完全に暗記) のに B-WER 21.7%。取り
 **テストセットは文の重複ゼロ・用語は全て学習内。** `data/test_sentences_100.tsv` は
 用語100件すべてが学習語彙にあり、文は学習データと完全一致も部分一致もしない。
 「学習した用語が未知の文脈で読めるか」を測るための構成なので、崩さないこと。
+
+**評価音声の話者 `jm_kumo` は学習に使わない。** 評価用100文は Kokoro の `jm_kumo`
+で合成してあり、学習を別話者にすることで「合成音の話者に張り付いていないか」を
+見られるようにしてある (`configs/eval_ft_v1_cpu.yaml` に明記)。多声化する際に
+`jm_kumo` を学習側のローテーションに入れてしまい、話者のホールドアウトを
+自分で壊した。学習は `jf_alpha,jf_gongitsune,jf_nezumi,jf_tebukuro` の4声に限る。
+
+## 過去の測定と比較するときは評価器と manifest を合わせる
+
+v1 の B-WER 21.7% は次の条件で出した数値。別の評価器で測ると比較にならない。
+
+| 項目 | 値 |
+|---|---|
+| 評価器 | `scripts/evaluate_whisper_streaming.py` (faster-whisper) |
+| config | `configs/eval_ft_v1_cpu.yaml` |
+| manifest | `out/eval_audio/stream_manifest.jsonl` (100文) |
+| モデル形式 | **CT2** (`out/ct2_ft_turbo`)。`eval_whisper_hf.py` は HF 形式用で読めない |
+| 分かち書き | fugashi |
+| 結果 | B-WER 0.2170 (23/106), U-WER 0.0792, WER 0.0656, CER 0.0498 |
+
+過去の結果は `experiments/ft_turbo_v1/` に summary.json ごと commit してある。
+コンテナが飛んでも git に残るので、比較条件はここから復元できる。
+CPU 評価は100文で約52分かかる (RTF 6.4)。
