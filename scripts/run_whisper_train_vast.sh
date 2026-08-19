@@ -74,20 +74,27 @@ command -v vastai >/dev/null || { echo "vastai CLI がありません: pip insta
 QUERY="gpu_name in [${GPU}] num_gpus>=${NUM_SHARDS} disk_space>=${DISK} inet_down>=300 reliability>0.98 rentable=true"
 
 echo "=== 提示を検索: $QUERY ==="
-PICKED="$(vastai search offers "$QUERY" -o 'dph+' --raw | MAX_DPH="$MAX_DPH" python3 -c '
+
+# $1 に除外したい offer id をカンマ区切りで渡す (起動に失敗したホストの再選択を避ける)。
+pick_offer() {
+    local picked
+    picked="$(vastai search offers "$QUERY" -o 'dph+' --raw \
+        | MAX_DPH="$MAX_DPH" SKIP_IDS="${1:-}" python3 -c '
 import json, os, sys
 cap = float(os.environ["MAX_DPH"])
+skip = {x for x in os.environ.get("SKIP_IDS", "").split(",") if x}
 for o in json.load(sys.stdin):
-    if o["dph_total"] <= cap:
+    if o["dph_total"] <= cap and str(o["id"]) not in skip:
         print(o["id"], "%.4f" % o["dph_total"], o["gpu_name"].replace(" ", "_"))
         break
 else:
-    sys.exit("$%.3f/hr 以下の提示なし -- MAX_DPH を上げてください" % cap)
+    sys.exit("$%.3f/hr 以下の未試行の提示なし -- MAX_DPH を上げてください" % cap)
 ')"
-read -r OFFER_ID OFFER_DPH OFFER_GPU <<<"$PICKED"
-
-echo "offer $OFFER_ID: $OFFER_GPU  \$$OFFER_DPH/hr"
-echo "MAX_HOURS=$MAX_HOURS 時点の最悪支出: \$$(python3 -c "print(f'{$OFFER_DPH * $MAX_HOURS:.2f}')")"
+    read -r OFFER_ID OFFER_DPH OFFER_GPU <<<"$picked"
+    echo "offer $OFFER_ID: $OFFER_GPU  \$$OFFER_DPH/hr"
+    echo "MAX_HOURS=$MAX_HOURS 時点の最悪支出: \$$(python3 -c "print(f'{$OFFER_DPH * $MAX_HOURS:.2f}')")"
+}
+pick_offer ""
 
 # PBS 版と同じ変数を、呼び出し側で設定されているものだけ引き継ぐ
 ENV_LINES="export BASE_MODEL='$BASE_MODEL' MIXED_PRECISION='$MIXED_PRECISION' NUM_SHARDS='$NUM_SHARDS'"
@@ -155,73 +162,131 @@ echo "TRAINING_COMPLETE"
 ONSTART_EOF
 
 # --- 借りたら必ず返す -------------------------------------------------------
-CREATE_ARGS=(create instance "$OFFER_ID"
-    --image "$IMAGE"
-    --disk "$DISK"
-    --env "-e HF_TOKEN=$HF_TOKEN"
-    --onstart-cmd "$ONSTART"
-    --raw)
-[[ "$SPOT" == "1" ]] && CREATE_ARGS+=(--bid "$OFFER_DPH")
-
-INSTANCE_ID="$(vastai "${CREATE_ARGS[@]}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["new_contract"])')"
-echo "=== instance $INSTANCE_ID を借りた ==="
-
+INSTANCE_ID=""
 destroy() {
+    [[ -n "$INSTANCE_ID" ]] || return 0
     echo ""
     echo "=== instance $INSTANCE_ID を破棄 ==="
     for _ in 1 2 3 4 5; do
         # -y は必須: これが無いと対話確認 ([y/N]) で止まり、非対話実行では
         # Aborted になって課金が続く。実際にそれでインスタンスが生き残った。
-        vastai destroy instance -y "$INSTANCE_ID" && return 0
+        if vastai destroy instance -y "$INSTANCE_ID"; then
+            INSTANCE_ID=""
+            return 0
+        fi
         sleep 5
     done
     echo "!! $INSTANCE_ID を破棄できませんでした。今すぐ手で消してください:" >&2
-    echo "   vastai destroy instance $INSTANCE_ID" >&2
+    echo "   vastai destroy instance -y $INSTANCE_ID" >&2
     return 1
 }
 trap destroy EXIT INT TERM
 
+rent_instance() {
+    local create_args=(create instance "$OFFER_ID"
+        --image "$IMAGE"
+        --disk "$DISK"
+        --env "-e HF_TOKEN=$HF_TOKEN"
+        --onstart-cmd "$ONSTART"
+        --raw)
+    [[ "$SPOT" == "1" ]] && create_args+=(--bid "$OFFER_DPH")
+    INSTANCE_ID="$(vastai "${create_args[@]}" \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin)["new_contract"])')"
+    echo "=== instance $INSTANCE_ID を借りた ==="
+}
+
 # --- 完了・エラー・予算切れのいずれかまで見張る -----------------------------
 # ローカル側の締切は MAX_HOURS + 固定作業分 (image pull / uv sync / モデル DL /
 # 結果アップロード)。TTS 初回はここが伸びるので余裕を多めに取る。
-DEADLINE=$(python3 -c "import time; print(int(time.time() + $MAX_HOURS * 3600 + 3600))")
+# --- 完了・エラー・予算切れのいずれかまで見張る -----------------------------
 # ログが1行も動かない状態が続いたら落ちたとみなす。番兵を出さずに死ぬ経路
-# (OOM killer / ホスト側の停止 / onstart 自体が起動しない) を拾うための保険。
+# (OOM killer / ホスト側の停止) を拾うための保険。
 STALL_MINUTES="${STALL_MINUTES:-25}"
-LAST_SIG=""
-LAST_CHANGE="$(date +%s)"
-echo "=== 監視中 (Ctrl-C でも破棄されます / 無進捗 ${STALL_MINUTES}分で打ち切り) ==="
+# 借りたのにホストがコンテナを起動できないことがある (実際に発生し、
+# "No such container" のまま何も起きなかった)。これはホスト固有の障害なので、
+# 短く見切って別の提示で借り直す。
+START_TIMEOUT_MIN="${START_TIMEOUT_MIN:-8}"
+ATTEMPTS="${ATTEMPTS:-3}"
 
-while [[ "$(date +%s)" -lt "$DEADLINE" ]]; do
-    sleep 60
-    LOG="$(vastai logs "$INSTANCE_ID" --tail 60 2>/dev/null || true)"
-    printf '%s' "$LOG" | grep -E "tts-progress|step [0-9]/4|'loss'|\[data\]" | tail -2 || true
+# 0=完了 / 1=打ち切り (このホストの問題ではない) / 2=ホストが起動しない
+monitor_instance() {
+    local deadline started_at now sig log seen_output=0 last_sig="" last_change
+    started_at="$(date +%s)"
+    last_change="$started_at"
+    # ローカル側の締切は MAX_HOURS + 固定作業分 (image pull / uv sync / モデル DL /
+    # 結果アップロード)。
+    deadline=$(python3 -c "import time; print(int(time.time() + $MAX_HOURS * 3600 + 3600))")
 
-    if printf '%s' "$LOG" | grep -q TRAINING_COMPLETE; then
-        echo ""
-        echo "=== 完了 -> https://huggingface.co/$OUT_REPO ==="
-        exit 0
-    fi
-    # ONSTART_FAILED が主。残りは番兵より先に気付けたとき用の早期打ち切り。
-    if printf '%s' "$LOG" | grep -qE "ONSTART_FAILED|Traceback|CUDA out of memory|^ERROR:"; then
-        echo ""
-        echo "=== インスタンス側でエラー。破棄して終了します ===" >&2
-        vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
-        exit 1
-    fi
+    while [[ "$(date +%s)" -lt "$deadline" ]]; do
+        sleep 60
+        # 2>&1 にする: ホストが起動できないときの "No such container" は
+        # stderr 側に出ることがあり、捨てると起動失敗を判定できない。
+        log="$(vastai logs "$INSTANCE_ID" --tail 60 2>&1 || true)"
+        printf '%s' "$log" | grep -E "tts-progress|step [0-9]/4|'loss'|\[data\]" | tail -2 || true
 
-    SIG="$(printf '%s' "$LOG" | md5sum | cut -d' ' -f1)"
-    NOW="$(date +%s)"
-    if [[ "$SIG" != "$LAST_SIG" ]]; then
-        LAST_SIG="$SIG"
-        LAST_CHANGE="$NOW"
-    elif (( NOW - LAST_CHANGE > STALL_MINUTES * 60 )); then
+        if printf '%s' "$log" | grep -q TRAINING_COMPLETE; then
+            return 0
+        fi
+        # ONSTART_FAILED が主。残りは番兵より先に気付けたとき用の早期打ち切り。
+        if printf '%s' "$log" | grep -qE "ONSTART_FAILED|Traceback|CUDA out of memory|^ERROR:"; then
+            echo "" >&2
+            echo "=== インスタンス側でエラー。破棄して終了します ===" >&2
+            vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
+            return 1
+        fi
+
+        now="$(date +%s)"
+        if printf '%s' "$log" | grep -q "No such container"; then
+            if (( now - started_at > START_TIMEOUT_MIN * 60 )); then
+                echo "" >&2
+                echo "=== ${START_TIMEOUT_MIN}分たってもコンテナが起動しません。別のホストで借り直します ===" >&2
+                return 2
+            fi
+            continue
+        fi
+        [[ -n "$log" ]] && seen_output=1
+        if (( seen_output == 0 && now - started_at > START_TIMEOUT_MIN * 60 )); then
+            echo "" >&2
+            echo "=== ${START_TIMEOUT_MIN}分たってもログが出ません。別のホストで借り直します ===" >&2
+            return 2
+        fi
+
+        sig="$(printf '%s' "$log" | md5sum | cut -d' ' -f1)"
+        if [[ "$sig" != "$last_sig" ]]; then
+            last_sig="$sig"
+            last_change="$now"
+        elif (( now - last_change > STALL_MINUTES * 60 )); then
+            echo "" >&2
+            echo "=== ${STALL_MINUTES}分ログが動きません。破棄して終了します ===" >&2
+            vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
+            return 1
+        fi
+    done
+    echo "=== ローカル締切に到達。破棄します ===" >&2
+    return 1
+}
+
+# 起動に失敗したホストは除外して借り直す。checkpoint は HF にあるので、
+# 途中まで進んでいれば RESUME=1 で続きから再開される。
+TRIED=""
+STATUS=1
+for attempt in $(seq 1 "$ATTEMPTS"); do
+    if [[ "$attempt" -gt 1 ]]; then
         echo ""
-        echo "=== ${STALL_MINUTES}分ログが動きません。破棄して終了します ===" >&2
-        vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
-        exit 1
+        echo "=== 別のホストで再試行 ($attempt/$ATTEMPTS) ==="
+        pick_offer "$TRIED"
     fi
+    TRIED="${TRIED:+$TRIED,}$OFFER_ID"
+    rent_instance
+    echo "=== 監視中 (Ctrl-C でも破棄されます / 起動 ${START_TIMEOUT_MIN}分・無進捗 ${STALL_MINUTES}分で打ち切り) ==="
+    if monitor_instance; then STATUS=0; else STATUS=$?; fi
+    [[ "$STATUS" == 2 ]] || break
+    destroy
 done
 
-echo "=== ローカル締切に到達。破棄します ===" >&2
+if [[ "$STATUS" == 0 ]]; then
+    echo ""
+    echo "=== 完了 -> https://huggingface.co/$OUT_REPO ==="
+    exit 0
+fi
 exit 1
