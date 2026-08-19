@@ -293,7 +293,12 @@ monitor_instance() {
         fi
         transient=0
 
-        printf '%s' "$log" | grep -E "tts-progress|step [0-9]/4|'loss'|\[data\]" | tail -2 || true
+        # パターンに合う行だけを出していたら、学習ループに入る前で止まっている
+        # ときに何も見えず、4時間を無駄にした。何が起きていても分かるよう、
+        # 経過時間と実際の最終行を毎回出す。
+        printf '[%3d分] %s\n' \
+            "$(( ($(date +%s) - started_at) / 60 ))" \
+            "$(printf '%s' "$log" | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-160)"
 
         if printf '%s' "$log" | grep -q TRAINING_COMPLETE; then
             rm -f "$errfile"
