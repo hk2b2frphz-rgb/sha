@@ -207,47 +207,80 @@ STALL_MINUTES="${STALL_MINUTES:-25}"
 # 短く見切って別の提示で借り直す。
 START_TIMEOUT_MIN="${START_TIMEOUT_MIN:-8}"
 ATTEMPTS="${ATTEMPTS:-3}"
+# vastai logs 自体が続けて失敗したら監視できていないので打ち切る (分)。
+TRANSIENT_LIMIT="${TRANSIENT_LIMIT:-15}"
 
 # 0=完了 / 1=打ち切り (このホストの問題ではない) / 2=ホストが起動しない
 monitor_instance() {
-    local deadline started_at now sig log seen_output=0 last_sig="" last_change
+    local deadline started_at now sig log err rc transient=0
+    local seen_output=0 last_sig="" last_change errfile
     started_at="$(date +%s)"
     last_change="$started_at"
+    errfile="$(mktemp)"
     # ローカル側の締切は MAX_HOURS + 固定作業分 (image pull / uv sync / モデル DL /
     # 結果アップロード)。
     deadline=$(python3 -c "import time; print(int(time.time() + $MAX_HOURS * 3600 + 3600))")
 
     while [[ "$(date +%s)" -lt "$deadline" ]]; do
         sleep 60
-        # 2>&1 にする: ホストが起動できないときの "No such container" は
-        # stderr 側に出ることがあり、捨てると起動失敗を判定できない。
-        log="$(vastai logs "$INSTANCE_ID" --tail 60 2>&1 || true)"
-        printf '%s' "$log" | grep -E "tts-progress|step [0-9]/4|'loss'|\[data\]" | tail -2 || true
+        # stdout と stderr を分けて受ける。インスタンスのログ本文は stdout に、
+        # vastai CLI 自身の失敗 (S3 からのログ取得タイムアウト等) は stderr に出る。
+        # 以前ここを 2>&1 でまとめてしまい、CLI 自身の Traceback を「インスタンス側の
+        # エラー」と誤判定して健全なインスタンスを破棄した。
+        rc=0
+        log="$(vastai logs "$INSTANCE_ID" --tail 60 2>"$errfile")" || rc=$?
+        err="$(cat "$errfile")"
 
-        if printf '%s' "$log" | grep -q TRAINING_COMPLETE; then
-            return 0
-        fi
-        # ONSTART_FAILED が主。残りは番兵より先に気付けたとき用の早期打ち切り。
-        if printf '%s' "$log" | grep -qE "ONSTART_FAILED|Traceback|CUDA out of memory|^ERROR:"; then
-            echo "" >&2
-            echo "=== インスタンス側でエラー。破棄して終了します ===" >&2
-            vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
-            return 1
-        fi
-
-        now="$(date +%s)"
-        if printf '%s' "$log" | grep -q "No such container"; then
+        # ホストがコンテナを起動できていない場合のメッセージだけは stderr も見る。
+        if printf '%s\n%s' "$log" "$err" | grep -q "No such container"; then
+            now="$(date +%s)"
             if (( now - started_at > START_TIMEOUT_MIN * 60 )); then
                 echo "" >&2
                 echo "=== ${START_TIMEOUT_MIN}分たってもコンテナが起動しません。別のホストで借り直します ===" >&2
+                rm -f "$errfile"
                 return 2
             fi
             continue
         fi
+
+        # CLI 側の一時的な失敗。インスタンスの状態は不明なので、成否の判定には
+        # 使わずに次の周回へ回す。ただし読めない状態が続くなら監視できていないので、
+        # 課金を垂れ流さないよう打ち切る。
+        if (( rc != 0 )); then
+            transient=$((transient + 1))
+            echo "[warn] vastai logs が失敗 (${transient}/${TRANSIENT_LIMIT}): $(printf '%s' "$err" | tail -1)" >&2
+            if (( transient >= TRANSIENT_LIMIT )); then
+                echo "=== ログを${TRANSIENT_LIMIT}回続けて取得できません。破棄して終了します ===" >&2
+                rm -f "$errfile"
+                return 1
+            fi
+            last_change="$(date +%s)"   # 状態不明の間はストール判定を進めない
+            continue
+        fi
+        transient=0
+
+        printf '%s' "$log" | grep -E "tts-progress|step [0-9]/4|'loss'|\[data\]" | tail -2 || true
+
+        if printf '%s' "$log" | grep -q TRAINING_COMPLETE; then
+            rm -f "$errfile"
+            return 0
+        fi
+        # ONSTART_FAILED が主。残りは番兵より先に気付けたとき用の早期打ち切り。
+        # 判定は必ず stdout (インスタンスのログ本文) だけに対して行う。
+        if printf '%s' "$log" | grep -qE "ONSTART_FAILED|Traceback|CUDA out of memory|^ERROR:"; then
+            echo "" >&2
+            echo "=== インスタンス側でエラー。破棄して終了します ===" >&2
+            vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
+            rm -f "$errfile"
+            return 1
+        fi
+
+        now="$(date +%s)"
         [[ -n "$log" ]] && seen_output=1
         if (( seen_output == 0 && now - started_at > START_TIMEOUT_MIN * 60 )); then
             echo "" >&2
             echo "=== ${START_TIMEOUT_MIN}分たってもログが出ません。別のホストで借り直します ===" >&2
+            rm -f "$errfile"
             return 2
         fi
 
@@ -259,9 +292,11 @@ monitor_instance() {
             echo "" >&2
             echo "=== ${STALL_MINUTES}分ログが動きません。破棄して終了します ===" >&2
             vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
+            rm -f "$errfile"
             return 1
         fi
     done
+    rm -f "$errfile"
     echo "=== ローカル締切に到達。破棄します ===" >&2
     return 1
 }
