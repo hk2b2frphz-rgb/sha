@@ -134,15 +134,12 @@ _onstart_exit() {
 }
 trap _onstart_exit EXIT
 export DEBIAN_FRONTEND=noninteractive
-# hf_transfer を「有効化だけして未インストール」にすると、huggingface_hub は
-# ダウンロード時に ValueError を投げて学習が落ちる (実際に落ちた)。
-# extra 指定 [hf_transfer] は現行版で廃止され警告のみで無視されるので、
-# パッケージを直接入れ、入った場合にだけ有効化する。
 pip install -q uv huggingface_hub
-# hf_transfer は「有効化だけして未インストール」だと huggingface_hub が
-# ValueError を投げて落ちる。入れてから、入った場合にだけ有効化する。
-pip install -q hf_transfer || true
-python -c "import hf_transfer" 2>/dev/null && export HF_HUB_ENABLE_HF_TRANSFER=1 || true
+# hf_transfer は入れない。入れて有効化した回に限って、ベースモデルの
+# feature extractor が読めずに落ちた (OSError: Can't load feature extractor)。
+# 「有効化だけして未インストール」だと huggingface_hub が ValueError を投げる
+# ので、有効化フラグ自体を立てない。取得が律速なのはデータセット側で、
+# そちらは tar 化で解決済み。
 git clone --depth 1 --branch "$BRANCH" "$REPO_URL" /workspace/repo
 cd /workspace/repo
 
@@ -155,13 +152,14 @@ mkdir -p "\$WORK_ROOT"
 # データセットは音声3795本 = 3800ファイルあり、1本でも取り損ねると全体が落ちる。
 # 実際に xet 経由で ConnectionError が2回発生して学習を落とした。hf download は
 # 取得済みのファイルを飛ばすので、再試行は毎回そのぶん前に進む。
-# xet 側で失敗しているので、素の HTTP 経路にも落とせるようにしておく。
-export HF_HUB_DISABLE_XET=\${HF_HUB_DISABLE_XET:-1}
+# xet 経由で ConnectionError が出ていたので素の HTTP 経路に落とす。ただし
+# この指定はデータセット取得だけに効かせる (_dl の中)。全体に export すると、
+# ベースモデルの取得経路まで巻き添えで変えてしまう。
 # 新しい dataprep は音声を tts_data.tar 1本にまとめて上げる。まずそれだけを
 # 取りに行く。個別ファイル (tts_data/**) も repo に残っている場合があり、
 # 全部取ると同じ音声を二重に落とすことになるので、--include で絞る。
 _dl() {
-    hf download "$DATA_REPO" --repo-type dataset --local-dir "\$WORK_ROOT" "\$@"
+    HF_HUB_DISABLE_XET=1 hf download "$DATA_REPO" --repo-type dataset --local-dir "\$WORK_ROOT" "\$@"
 }
 _dl_ok=0
 for _try in 1 2 3 4 5; do
@@ -201,11 +199,27 @@ python3 scripts/rebase_manifest_paths.py \
     --manifest "\$WORK_ROOT/train_manifest.jsonl" \
     --root "\$WORK_ROOT" --in-place
 
-# 前回が中断されていれば checkpoint を取り戻す (無ければ何も起きない)。
+# 中間 checkpoint の退避を使う構成のときだけ、前回の続きを取り戻す。
 # 置き場は ADAPTER_ROOT=\$WORK_ROOT/\$FT_MODE で、そこの trainer/ を見て再開する。
-hf download "$CHECKPOINT_REPO" --local-dir "\$WORK_ROOT/$FT_MODE" 2>/dev/null \
-    && echo "[ckpt] 前回の checkpoint を取得した" \
-    || echo "[ckpt] 既存 checkpoint なし (新規学習)"
+if [ -n "$CHECKPOINT_REPO" ]; then
+    hf download "$CHECKPOINT_REPO" --local-dir "\$WORK_ROOT/$FT_MODE" 2>/dev/null \
+        && echo "[ckpt] 前回の checkpoint を取得した" \
+        || echo "[ckpt] 既存 checkpoint なし (新規学習)"
+fi
+
+# ベースモデルを先にキャッシュへ入れておく。学習スクリプトの中から暗黙に
+# 取りに行かせると、一時的な取得失敗がそのまま学習全体の失敗になる
+# (実際に feature extractor が読めずに落ちた)。ここで再試行を効かせる。
+_bm_ok=0
+for _try in 1 2 3 4 5; do
+    if hf download "$BASE_MODEL" > /dev/null; then
+        _bm_ok=1
+        break
+    fi
+    echo "[model] $BASE_MODEL の取得に失敗 (試行 \$_try/5)。再試行する"
+    sleep \$((_try * 20))
+done
+[ "\$_bm_ok" = 1 ] || { echo "[model] 5回試しても $BASE_MODEL を取得できませんでした" >&2; exit 1; }
 
 $ENV_LINES
 export WORK_ROOT
