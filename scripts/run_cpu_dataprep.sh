@@ -11,7 +11,10 @@
 #   bash scripts/run_cpu_dataprep.sh <generated_sentences.csv> [out-dir]
 #
 # Environment variables:
-#   KOKORO_VOICE=jf_alpha   Kokoro 日本語ボイス (jf_alpha/jf_gongitsune/jf_tebukuro/jm_kumo)
+#   KOKORO_VOICES=...       カンマ区切りのボイス。既定は日本語プリセット5声を巡回する。
+#                           単一話者だと decoder がその声の音響に張り付いて実録音に移らない。
+#   KOKORO_SPEEDS=...       カンマ区切りの話速。ボイス数と互いに素にして周期を伸ばす。
+#   KOKORO_VOICE=jf_alpha   単一ボイス指定 (KOKORO_VOICES 未指定時のみ有効)
 #   DEV_RATIO=0.10          dev に回す割合
 #   SEED=42                 分割のシード
 #   LIMIT=0                 先頭 N 件だけ処理する (0=全件、疎通確認用)
@@ -21,6 +24,8 @@ CSV="${1:?usage: bash scripts/run_cpu_dataprep.sh <generated_sentences.csv> [out
 OUT_DIR="${2:-out/whisper_turbo}"
 
 KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
+KOKORO_VOICES="${KOKORO_VOICES:-jf_alpha,jf_gongitsune,jf_nezumi,jf_tebukuro,jm_kumo}"
+KOKORO_SPEEDS="${KOKORO_SPEEDS:-0.92,1.0,1.08}"
 KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
 DEV_RATIO="${DEV_RATIO:-0.10}"
 SEED="${SEED:-42}"
@@ -72,6 +77,8 @@ KOKORO_UV=(
     --out-dir "$TTS_OUT" \
     --model-id "$KOKORO_MODEL" \
     --voice "$KOKORO_VOICE" \
+    --voices "$KOKORO_VOICES" \
+    --speeds "$KOKORO_SPEEDS" \
     --device cpu
 
 # ---- step 3/4: 学習 manifest -----------------------------------------------
