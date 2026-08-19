@@ -1,0 +1,68 @@
+# Whisper models: batch evaluation
+
+`scripts/run_whisper_eval_all.pbs` evaluates many CTranslate2 (CT2) Whisper
+models against exactly the same audio and reference texts. It reserves V100 x4
+(`xvn_s` / `res=middle2`) and evaluates up to four models in parallel, one per
+GPU. Additional models run in the next batch. A missing or failed model is
+recorded and does not stop the remaining evaluations. All server-specific
+settings live in the root
+`manifest.txt`, which is intentionally ignored by Git.
+
+## 1. Edit `manifest.txt`
+
+Set the test WAV directory, its positional reference text file, and one or more models.
+Each `MODEL=` value is a tab-separated pair of a unique label and CT2 model
+directory. Labels may only contain letters, digits, `.`, `_`, and `-`.
+
+```ini
+# Also used by run_whisper_train.pbs.
+BASE_MODEL=openai/whisper-large-v3-turbo
+
+WAV_DIR=data/test_wav
+REFS=data/test_refs.txt
+MODEL=baseline	/path/to/baseline-ct2
+MODEL=ft_v1	out/whisper_turbo/ct2
+MODEL=ft_v2	out/whisper_turbo_v2/ct2
+```
+
+Each listed directory must contain `model.bin`.
+
+## 2. Submit the batch evaluation
+
+Pass the test WAV directory and the matching reference file. `REFS` is
+required, ensuring that the comparison reports CER and WER against the ground
+truth rather than performing transcription only.
+
+```bash
+qsub scripts/run_whisper_eval_all.pbs
+```
+
+`REFS` may be a plain `.txt` file containing one correct sentence per line.
+The lines are paired with WAV files in natural filename order (`1.wav`,
+`2.wav`, `10.wav`). Blank lines and lines beginning with `#` are ignored.
+The reference-line count must therefore match the WAV-file count.
+
+```text
+1番目の正解文
+2番目の正解文
+10番目の正解文
+```
+
+Keyed TSV (`001.wav<TAB>正解文`) is also accepted when a filename-based
+mapping is preferable.
+
+## Results
+
+Each model's predictions, detailed report, and JSON summary are written to:
+
+```text
+experiments/whisper_turbo_eval_all/<label>/
+```
+
+The batch also produces these files:
+
+- `experiments/whisper_turbo_eval_all/summary.md` — readable ranking table
+- `experiments/whisper_turbo_eval_all/summary.csv` — spreadsheet-friendly data
+
+Models are ranked by lower CER, then lower WER, then higher inference speed.
+Skipped and failed models are also listed in the summary without a rank.

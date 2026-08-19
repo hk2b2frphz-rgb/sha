@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N STDIN
+#PBS -q xvn_s
+#PBS -l select=1:res=small
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -V
+
+# Build evaluation WAV files only. All comments and output in this PBS file are
+# ASCII so it can be submitted to PBS installations that reject UTF-8 scripts.
+#
+# Examples:
+#   qsub -V scripts/run_asr_eval_data_tts.pbs
+#   qsub -v "TTS_BACKEND=kokoro,KOKORO_VOICE=jm_kumo" scripts/run_asr_eval_data_tts.pbs
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+# Configure proxy variables for uv and the isolated Kokoro environment.
+if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$PWD/scripts/setup_proxy.sh"
+fi
+
+SENTENCES_TXT="${SENTENCES_TXT:-data/asr_eval_sentences.txt}"
+# Keep the original sentence intact and replace only matching technical terms
+# with their readings before TTS. Set READINGS_TSV to another mapping as needed.
+READINGS_TSV="${READINGS_TSV:-data/annotations.tsv}"
+OUT_DIR="${OUT_DIR:-out/whisper_streaming_eval/audio}"
+EVAL_JSONL="${EVAL_JSONL:-out/whisper_streaming_eval/sentences.jsonl}"
+TTS_BACKEND="${TTS_BACKEND:-qwen3}"
+TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"
+TTS_SPEAKER="${TTS_SPEAKER:-Ono_Anna}"
+TTS_DEVICE="${TTS_DEVICE:-cuda:0}"
+TTS_DTYPE="${TTS_DTYPE:-float16}"
+KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
+KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
+KOKORO_SPEED="${KOKORO_SPEED:-1.0}"
+LEAD_SILENCE_MS="${LEAD_SILENCE_MS:-500}"
+CLEAN_WAV_DIR="${CLEAN_WAV_DIR:-1}"
+CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES
+
+mkdir -p logs experiments/pbs_logs "$(dirname "$EVAL_JSONL")" "$OUT_DIR"
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/ws_eval_tts_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+echo "===== ASR evaluation audio TTS ====="
+echo "host:          $(hostname)"
+echo "sentences_txt: $SENTENCES_TXT"
+echo "readings_tsv:  ${READINGS_TSV:-none}"
+echo "eval_jsonl:    $EVAL_JSONL"
+echo "out_dir:       $OUT_DIR"
+echo "tts_backend:   $TTS_BACKEND"
+echo "lead_silence:  ${LEAD_SILENCE_MS}ms"
+echo "clean_wav_dir: $CLEAN_WAV_DIR"
+if [[ "$TTS_BACKEND" == "kokoro" ]]; then
+    echo "kokoro_model:  $KOKORO_MODEL"
+    echo "kokoro_voice:  $KOKORO_VOICE"
+    echo "kokoro_speed:  $KOKORO_SPEED"
+else
+    echo "tts_model:     $TTS_MODEL"
+    echo "speaker:       $TTS_SPEAKER"
+    echo "dtype:         $TTS_DTYPE"
+fi
+
+command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
+[[ -s "$SENTENCES_TXT" ]] || { echo "ERROR: SENTENCES_TXT is missing or empty: $SENTENCES_TXT" >&2; exit 1; }
+if [[ -n "$READINGS_TSV" && ! -s "$READINGS_TSV" ]]; then
+    echo "ERROR: READINGS_TSV is missing or empty: $READINGS_TSV" >&2
+    exit 1
+fi
+if [[ "$TTS_BACKEND" != "qwen3" && "$TTS_BACKEND" != "kokoro" ]]; then
+    echo "ERROR: TTS_BACKEND must be qwen3 or kokoro: $TTS_BACKEND" >&2
+    exit 1
+fi
+if ! [[ "$LEAD_SILENCE_MS" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: LEAD_SILENCE_MS must be a non-negative integer: $LEAD_SILENCE_MS" >&2
+    exit 1
+fi
+if [[ "$CLEAN_WAV_DIR" == "1" ]]; then
+    if [[ -z "$OUT_DIR" || "$OUT_DIR" == "." || "$OUT_DIR" == "/" ]]; then
+        echo "ERROR: refusing to clean an unsafe OUT_DIR: $OUT_DIR" >&2
+        exit 1
+    fi
+    rm -rf -- "$OUT_DIR/wav"
+fi
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
+
+uv sync
+
+prepare_args=(
+    uv run python scripts/prepare_asr_eval_jsonl.py
+    --input "$SENTENCES_TXT"
+    --out "$EVAL_JSONL"
+)
+if [[ -n "$READINGS_TSV" ]]; then prepare_args+=(--readings-tsv "$READINGS_TSV"); fi
+"${prepare_args[@]}"
+
+if [[ "$TTS_BACKEND" == "kokoro" ]]; then
+    TORCH_VERSION="$(uv run python -c 'import torch; print(torch.__version__)')"
+    TORCHAUDIO_VERSION="$(uv run python -c 'import torchaudio; print(torchaudio.__version__)')"
+    KOKORO_UV=(
+        uv run --isolated --no-project
+        --index "pytorch-cu121=https://download.pytorch.org/whl/cu121"
+        --with "kokoro>=0.9.4"
+        --with "misaki[ja]"
+        --with unidic
+        --with pyopenjtalk
+        --with soundfile
+        --with numpy
+        --with "torch==$TORCH_VERSION"
+        --with "torchaudio==$TORCHAUDIO_VERSION"
+    )
+    "${KOKORO_UV[@]}" python -m unidic download
+    "${KOKORO_UV[@]}" python scripts/synthesize_speech_kokoro.py \
+        --sentences "$EVAL_JSONL" \
+        --out-dir "$OUT_DIR" \
+        --model-id "$KOKORO_MODEL" \
+        --voice "$KOKORO_VOICE" \
+        --speed "$KOKORO_SPEED" \
+        --lead-silence-ms "$LEAD_SILENCE_MS" \
+        --device "cuda"
+else
+    uv run python scripts/synthesize_speech.py \
+        --sentences "$EVAL_JSONL" \
+        --out-dir "$OUT_DIR" \
+        --model "$TTS_MODEL" \
+        --speaker "$TTS_SPEAKER" \
+        --device "$TTS_DEVICE" \
+        --dtype "$TTS_DTYPE" \
+        --lead-silence-ms "$LEAD_SILENCE_MS"
+fi
+
+echo "manifest: $OUT_DIR/manifest.jsonl"
+echo "wav_dir:  $OUT_DIR/wav"
+echo "finished_at: $(date -Iseconds)"

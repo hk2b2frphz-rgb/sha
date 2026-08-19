@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N STDIN
+#PBS -q xvn_s
+#PBS -l select=1:res=middle2
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -V
+
+# generated_sentences.csv -> TTS (multi-GPU parallel) -> whisper-large-v3-turbo
+# fine-tune -> CTranslate2 convert.
+#
+# FT_MODE selects how the model is trained:
+#   full (default) train the weights directly, with the ENCODER FROZEN so the
+#                  model does not overfit the acoustics of the synthetic TTS
+#                  audio; only the decoder learns the domain spellings.
+#                  Pass FREEZE_ENCODER=0 to train the encoder as well.
+#   lora           LoRA adapters only, then merged into the base model.
+# LR defaults to 1e-5 for full and 1e-4 for lora; set LR to override.
+# DEFAULT node: queue xvn_s, res=middle2 = V100 x4. TTS backend defaults to Kokoro
+# (fast); pass TTS_BACKEND=qwen3 for Qwen3-TTS instead.
+#
+# Training data (TTS audio + manifest) is built once and reused. If TRAIN_MANIFEST
+# already exists, the TTS build step is skipped, so re-runs only re-train with new
+# hyper-parameters. Pass FORCE_REBUILD_DATA=1 to rebuild the audio.
+#
+# NUM_SHARDS sets both GPU count and DDP processes; GPUs are auto-derived from it.
+#
+# Submit (this script already has `#PBS -V`; pass overrides with qsub -v):
+#   # default: V100 x4 (xvn_s/res=middle2), Kokoro TTS:
+#   qsub scripts/run_whisper_train.pbs
+#   # Qwen3-TTS instead of Kokoro:
+#   qsub -v TTS_BACKEND=qwen3 scripts/run_whisper_train.pbs
+#   # audio already built -> re-train on a single V100 (TTS is skipped via reuse):
+#   qsub -l select=1:res=small -v NUM_SHARDS=1 scripts/run_whisper_train.pbs
+#   # A100 x2 (faster TTS) on xan_s:
+#   qsub -q xan_s -l select=1:res=middle -v NUM_SHARDS=2 scripts/run_whisper_train.pbs
+#   # LoRA instead of the default full fine-tune:
+#   qsub -v FT_MODE=lora scripts/run_whisper_train.pbs
+#   # full fine-tune including the encoder (not recommended on TTS-only data):
+#   qsub -v FREEZE_ENCODER=0 scripts/run_whisper_train.pbs
+#
+# TTS progress is printed to this log as [tts-progress] every PROGRESS_EVERY sec
+# (default 30). Per-utterance detail with ETA is in out/.../tts_data/shard_*.log.
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+# OFFLINE=1: this node has no network (e.g. res=middle2). Use the .venv and HF
+# cache prepared beforehand by scripts/prestage_offline.sh on a networked node.
+OFFLINE="${OFFLINE:-0}"
+if [[ "$OFFLINE" == "1" ]]; then
+    echo "OFFLINE=1: using prestaged .venv and HF cache (no network access)"
+    export UV_OFFLINE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+else
+    # Configure http(s)_proxy for uv sync / HF download on networked nodes.
+    if [[ -f "$PWD/scripts/setup_proxy.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$PWD/scripts/setup_proxy.sh"
+    fi
+fi
+
+# full = train the weights directly (encoder frozen by default); lora = adapters.
+FT_MODE="${FT_MODE:-full}"
+FREEZE_ENCODER="${FREEZE_ENCODER:-1}"
+
+CSV="${CSV:-data/generated_sentences.csv}"
+BASE_MODEL_FILE="${BASE_MODEL_FILE:-manifest.txt}"
+WORK_ROOT="${WORK_ROOT:-out/whisper_turbo}"
+TTS_INPUT="${TTS_INPUT:-$WORK_ROOT/tts_input.jsonl}"
+DATA_ROOT="${DATA_ROOT:-$WORK_ROOT/tts_data}"
+TRAIN_MANIFEST="${TRAIN_MANIFEST:-$WORK_ROOT/train_manifest.jsonl}"
+ADAPTER_ROOT="${ADAPTER_ROOT:-$WORK_ROOT/$FT_MODE}"
+MERGED_DIR="${MERGED_DIR:-$WORK_ROOT/merged_hf}"
+CT2_DIR="${CT2_DIR:-$WORK_ROOT/ct2}"
+
+# NUM_SHARDS = number of GPUs used for parallel TTS and for DDP training.
+#   default 4 (xvn_s/res=middle2 = V100 x4); NUM_SHARDS=1 to re-train on a single
+#   GPU (audio reused so TTS is skipped); NUM_SHARDS=2 for A100 res=middle.
+# Derive CUDA_VISIBLE_DEVICES from NUM_SHARDS so callers never need to pass a
+# comma-separated list via `qsub -v` (the comma would split into bogus vars).
+# `#PBS -V` can also inherit a stale single-GPU value; deriving here avoids that.
+# To pin specific GPUs, pass GPU_LIST=0,2 instead.
+NUM_SHARDS="${NUM_SHARDS:-4}"
+if [[ -n "${GPU_LIST:-}" ]]; then
+    CUDA_VISIBLE_DEVICES="$GPU_LIST"
+else
+    CUDA_VISIBLE_DEVICES="$(seq -s, 0 $((NUM_SHARDS - 1)))"
+fi
+export CUDA_VISIBLE_DEVICES
+
+# TTS backend: kokoro (fast, default) | qwen3
+TTS_BACKEND="${TTS_BACKEND:-kokoro}"
+TTS_MODEL="${TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}"
+TTS_SPEAKER="${TTS_SPEAKER:-Ono_Anna}"
+# V100 has no bf16; default float16. (Only used by the qwen3 backend.)
+TTS_DTYPE="${TTS_DTYPE:-float16}"
+# Kokoro Japanese preset voice (jf_alpha/jf_gongitsune/jf_tebukuro women, jm_kumo man)
+KOKORO_MODEL="${KOKORO_MODEL:-hexgrad/Kokoro-82M}"
+KOKORO_VOICE="${KOKORO_VOICE:-jf_alpha}"
+
+if [[ "$FT_MODE" == "full" ]]; then
+    LR="${LR:-1e-5}"
+else
+    LR="${LR:-1e-4}"
+fi
+
+EPOCHS="${EPOCHS:-5}"
+BATCH_SIZE="${BATCH_SIZE:-8}"
+GRAD_ACCUM="${GRAD_ACCUM:-1}"
+LORA_R="${LORA_R:-32}"
+LORA_ALPHA="${LORA_ALPHA:-64}"
+LANGUAGE="${LANGUAGE:-ja}"
+CT2_QUANT="${CT2_QUANT:-float16}"
+FORCE_REBUILD_DATA="${FORCE_REBUILD_DATA:-0}"
+
+mkdir -p logs experiments/pbs_logs "$WORK_ROOT" "$DATA_ROOT"
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/ws_turbo_train_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+IFS=',' read -r -a GPU_IDS <<< "$CUDA_VISIBLE_DEVICES"
+
+echo "===== whisper-large-v3-turbo train (mode=$FT_MODE) ====="
+echo "host:            $(hostname)"
+echo "csv:             $CSV"
+echo "base_model_file: $BASE_MODEL_FILE"
+echo "train_manifest:  $TRAIN_MANIFEST"
+echo "train_out:       $ADAPTER_ROOT"
+echo "merged_dir:      $MERGED_DIR"
+echo "ct2_dir:         $CT2_DIR"
+echo "gpus:            $CUDA_VISIBLE_DEVICES  (num_shards=$NUM_SHARDS)"
+if [[ "$TTS_BACKEND" == "kokoro" ]]; then
+    echo "tts_backend:     kokoro (voice=$KOKORO_VOICE, model=$KOKORO_MODEL)"
+else
+    echo "tts_backend:     qwen3 (speaker=$TTS_SPEAKER, dtype=$TTS_DTYPE)"
+fi
+echo "ft_mode=$FT_MODE freeze_encoder=$FREEZE_ENCODER"
+echo "epochs=$EPOCHS lr=$LR bs=$BATCH_SIZE grad_accum=$GRAD_ACCUM lora_r=$LORA_R"
+echo "started_at:      $(date -Iseconds)"
+echo "============================================="
+
+command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is not available on PATH." >&2; exit 1; }
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; fi
+if [[ "${#GPU_IDS[@]}" -lt "$NUM_SHARDS" ]]; then
+    echo "ERROR: only ${#GPU_IDS[@]} GPU(s) available but NUM_SHARDS=$NUM_SHARDS" >&2
+    exit 1
+fi
+if [[ ! -s "$CSV" ]]; then
+    echo "ERROR: CSV is missing or empty: $CSV" >&2
+    exit 1
+fi
+
+if [[ "$OFFLINE" == "1" ]]; then
+    echo "===== uv sync (offline, cache only) ====="
+    echo "UV_OFFLINE=$UV_OFFLINE HF_HUB_OFFLINE=$HF_HUB_OFFLINE TRANSFORMERS_OFFLINE=$TRANSFORMERS_OFFLINE"
+    if [[ ! -d .venv ]]; then
+        echo "ERROR: .venv not found. Run scripts/prestage_offline.sh on a networked node first." >&2
+        exit 1
+    fi
+    uv sync --offline
+else
+    echo "===== network preflight ====="
+    echo "http_proxy=${http_proxy:-unset}  https_proxy=${https_proxy:-unset}"
+    echo "no_proxy=${no_proxy:-unset}"
+    export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
+    export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-60}"
+    echo "UV_HTTP_TIMEOUT=$UV_HTTP_TIMEOUT  HF_HUB_DOWNLOAD_TIMEOUT=$HF_HUB_DOWNLOAD_TIMEOUT"
+    echo "===== uv sync (verbose) ====="
+    uv sync -v
+fi
+
+# ---- step 1/4: build TTS training data (reuse if it already exists) ---------
+if [[ -s "$TRAIN_MANIFEST" && "$FORCE_REBUILD_DATA" != "1" ]]; then
+    echo "===== step 1/4: reusing existing TTS training data ($TRAIN_MANIFEST) ====="
+else
+    echo "===== step 1/4: building TTS training data ($TTS_BACKEND, ${NUM_SHARDS}-GPU parallel) ====="
+    uv run python scripts/prepare_train_from_csv.py --input "$CSV" --out "$TTS_INPUT"
+    echo "term mismatch report: $(dirname "$TTS_INPUT")/term_mismatch.tsv  (cat to inspect)"
+
+    # Kokoro conflicts with the project deps (misaki[ja] wants full unidic vs our
+    # unidic-lite), so it runs in an isolated uv env. Build the KOKORO_UV launcher
+    # from the project's torch version and fetch the unidic dictionary once.
+    if [[ "$TTS_BACKEND" == "kokoro" ]]; then
+        TORCH_VERSION="$(uv run python -c 'import torch; print(torch.__version__)')"
+        TORCHAUDIO_VERSION="$(uv run python -c 'import torchaudio; print(torchaudio.__version__)')"
+        KOKORO_UV=(
+            uv run --isolated --no-project
+            --index "pytorch-cu121=https://download.pytorch.org/whl/cu121"
+            --with "kokoro>=0.9.4"
+            --with "misaki[ja]"
+            --with unidic
+            --with pyopenjtalk
+            --with soundfile
+            --with numpy
+            --with "torch==$TORCH_VERSION"
+            --with "torchaudio==$TORCHAUDIO_VERSION"
+        )
+        echo "[kokoro] downloading unidic dictionary..."
+        "${KOKORO_UV[@]}" python -m unidic download
+    fi
+
+    # split tts_input into NUM_SHARDS parts
+    uv run python - "$TTS_INPUT" "$DATA_ROOT" "$NUM_SHARDS" <<'PY'
+import sys
+from pathlib import Path
+src = Path(sys.argv[1]); root = Path(sys.argv[2]); n = int(sys.argv[3])
+rows = [l for l in src.read_text(encoding="utf-8").splitlines() if l.strip()]
+for i in range(n):
+    d = root / f"shard_{i:02d}"; d.mkdir(parents=True, exist_ok=True)
+    part = [r for j, r in enumerate(rows) if j % n == i]
+    (d / "sentences.jsonl").write_text("\n".join(part) + ("\n" if part else ""), encoding="utf-8")
+    print(f"shard_{i:02d}: {len(part)} rows")
+PY
+
+    pids=()
+    for ((i = 0; i < NUM_SHARDS; i++)); do
+        shard_tag="$(printf 'shard_%02d' "$i")"
+        shard_dir="$DATA_ROOT/$shard_tag"
+        gpu_id="${GPU_IDS[$i]}"
+        shard_log="$DATA_ROOT/${shard_tag}.log"
+        (
+            set -euo pipefail
+            if [[ "$TTS_BACKEND" == "kokoro" ]]; then
+                CUDA_VISIBLE_DEVICES="$gpu_id" "${KOKORO_UV[@]}" \
+                    python scripts/synthesize_speech_kokoro.py \
+                    --sentences "$shard_dir/sentences.jsonl" \
+                    --out-dir "$shard_dir" \
+                    --model-id "$KOKORO_MODEL" \
+                    --voice "$KOKORO_VOICE" \
+                    --device "cuda"
+            else
+                CUDA_VISIBLE_DEVICES="$gpu_id" uv run python scripts/synthesize_speech.py \
+                    --sentences "$shard_dir/sentences.jsonl" \
+                    --out-dir "$shard_dir" \
+                    --model "$TTS_MODEL" \
+                    --speaker "$TTS_SPEAKER" \
+                    --device "cuda:0" \
+                    --dtype "$TTS_DTYPE"
+            fi
+            test -s "$shard_dir/manifest.jsonl"
+        ) > "$shard_log" 2>&1 &
+        pids+=("$!")
+        echo "started $shard_tag on gpu $gpu_id (log=$shard_log)"
+    done
+
+    # Aggregate progress into the MAIN job log every PROGRESS_EVERY seconds by
+    # counting completed rows across shard manifests (per-utterance detail is in
+    # the shard_*.log files). Runs in the background; stopped after shards finish.
+    tts_total="$(grep -c . "$TTS_INPUT" 2>/dev/null || echo 0)"
+    PROGRESS_EVERY="${PROGRESS_EVERY:-30}"
+    (
+        mon_start=$(date +%s)
+        while true; do
+            done_n=0
+            for ((i = 0; i < NUM_SHARDS; i++)); do
+                m="$DATA_ROOT/$(printf 'shard_%02d' "$i")/manifest.jsonl"
+                if [[ -f "$m" ]]; then
+                    c=$(grep -c . "$m" 2>/dev/null || echo 0)
+                    done_n=$((done_n + c))
+                fi
+            done
+            el=$(( $(date +%s) - mon_start ))
+            pct=0; [[ "$tts_total" -gt 0 ]] && pct=$(( done_n * 100 / tts_total ))
+            rate=""; [[ "$done_n" -gt 0 ]] && rate=" ~$(( el / (done_n>0?done_n:1) ))s/utt"
+            echo "[tts-progress] ${done_n}/${tts_total} (${pct}%) elapsed=${el}s${rate}"
+            [[ "$tts_total" -gt 0 && "$done_n" -ge "$tts_total" ]] && break
+            sleep "$PROGRESS_EVERY"
+        done
+    ) &
+    monitor_pid=$!
+
+    failed=0
+    for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+    kill "$monitor_pid" 2>/dev/null || true
+    wait "$monitor_pid" 2>/dev/null || true
+    echo "[tts-progress] all shards finished"
+    if [[ "$failed" != "0" ]]; then
+        echo "ERROR: a TTS shard failed. See $DATA_ROOT/shard_*.log" >&2
+        exit 1
+    fi
+
+    synth_args=()
+    for ((i = 0; i < NUM_SHARDS; i++)); do
+        synth_args+=(--synth-dir "$DATA_ROOT/$(printf 'shard_%02d' "$i")")
+    done
+    uv run python scripts/build_whisper_manifest.py \
+        --tts-input "$TTS_INPUT" \
+        "${synth_args[@]}" \
+        --out "$TRAIN_MANIFEST"
+fi
+test -s "$TRAIN_MANIFEST"
+echo "train rows: $(grep -c . "$TRAIN_MANIFEST")"
+
+# ---- step 2/4: fine-tune (DDP) ---------------------------------------------
+# Both modes write the model CT2 converts to into MERGED_DIR: lora merges the
+# adapter into the base there, full saves its trained weights there directly.
+TRAIN_FLAGS=(--finetune-mode "$FT_MODE")
+if [[ "$FT_MODE" == "full" ]]; then
+    if [[ "$FREEZE_ENCODER" == "1" ]]; then
+        TRAIN_FLAGS+=(--freeze-encoder)
+    else
+        TRAIN_FLAGS+=(--no-freeze-encoder)
+    fi
+else
+    TRAIN_FLAGS+=(--lora-r "$LORA_R" --lora-alpha "$LORA_ALPHA")
+fi
+
+echo "===== step 2/4: $FT_MODE fine-tune (${NUM_SHARDS}-GPU DDP) ====="
+uv run accelerate launch --num_processes "$NUM_SHARDS" --mixed_precision fp16 \
+    scripts/train_whisper_lora.py \
+    --manifest "$TRAIN_MANIFEST" \
+    --base-model-file "$BASE_MODEL_FILE" \
+    --out-dir "$ADAPTER_ROOT" \
+    --merge-dir "$MERGED_DIR" \
+    --language "$LANGUAGE" \
+    --epochs "$EPOCHS" \
+    --lr "$LR" \
+    --batch-size "$BATCH_SIZE" \
+    --grad-accum "$GRAD_ACCUM" \
+    "${TRAIN_FLAGS[@]}"
+test -d "$MERGED_DIR"
+
+# ---- step 3/4: CTranslate2 conversion --------------------------------------
+echo "===== step 3/4: CTranslate2 conversion ====="
+rm -rf "$CT2_DIR"
+uv run ct2-transformers-converter \
+    --model "$MERGED_DIR" \
+    --output_dir "$CT2_DIR" \
+    --quantization "$CT2_QUANT" \
+    --copy_files tokenizer.json preprocessor_config.json
+test -s "$CT2_DIR/model.bin"
+
+# ---- step 4/4: done --------------------------------------------------------
+echo "===== step 4/4: done ====="
+echo "ct2_model_dir: $CT2_DIR"
+echo "evaluate with: MODEL_DIR=$CT2_DIR MANIFEST=<test_manifest.jsonl> qsub -V scripts/run_whisper_eval.pbs"
+echo "finished_at:   $(date -Iseconds)"

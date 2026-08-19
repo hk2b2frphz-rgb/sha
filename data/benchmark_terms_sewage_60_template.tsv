@@ -1,0 +1,69 @@
+# Sewage-domain reading benchmark expansion template.
+# Goal: expand sewage gold coverage toward 60 independently curated entries.
+# Fill term/readings manually from human review or authoritative domain sources.
+# Do NOT copy readings from Sudachi, UniDic/fugashi, pyopenjtalk, LLM outputs, or any resolver under evaluation.
+# Dictionary/TTS/G2P systems are methods being evaluated; using them to fill gold is circular evaluation.
+# readings may contain multiple acceptable readings separated by "|"; keep all readings normalized to hiragana.
+# source should name the human reviewer or external authority used for curation.
+# notes should record uncertainty, abbreviation policy, or source page references.
+id	term	reading	source	domain	notes
+S001			human_curated	sewage	
+S002			human_curated	sewage	
+S003			human_curated	sewage	
+S004			human_curated	sewage	
+S005			human_curated	sewage	
+S006			human_curated	sewage	
+S007			human_curated	sewage	
+S008			human_curated	sewage	
+S009			human_curated	sewage	
+S010			human_curated	sewage	
+S011			human_curated	sewage	
+S012			human_curated	sewage	
+S013			human_curated	sewage	
+S014			human_curated	sewage	
+S015			human_curated	sewage	
+S016			human_curated	sewage	
+S017			human_curated	sewage	
+S018			human_curated	sewage	
+S019			human_curated	sewage	
+S020			human_curated	sewage	
+S021			human_curated	sewage	
+S022			human_curated	sewage	
+S023			human_curated	sewage	
+S024			human_curated	sewage	
+S025			human_curated	sewage	
+S026			human_curated	sewage	
+S027			human_curated	sewage	
+S028			human_curated	sewage	
+S029			human_curated	sewage	
+S030			human_curated	sewage	
+S031			human_curated	sewage	
+S032			human_curated	sewage	
+S033			human_curated	sewage	
+S034			human_curated	sewage	
+S035			human_curated	sewage	
+S036			human_curated	sewage	
+S037			human_curated	sewage	
+S038			human_curated	sewage	
+S039			human_curated	sewage	
+S040			human_curated	sewage	
+S041			human_curated	sewage	
+S042			human_curated	sewage	
+S043			human_curated	sewage	
+S044			human_curated	sewage	
+S045			human_curated	sewage	
+S046			human_curated	sewage	
+S047			human_curated	sewage	
+S048			human_curated	sewage	
+S049			human_curated	sewage	
+S050			human_curated	sewage	
+S051			human_curated	sewage	
+S052			human_curated	sewage	
+S053			human_curated	sewage	
+S054			human_curated	sewage	
+S055			human_curated	sewage	
+S056			human_curated	sewage	
+S057			human_curated	sewage	
+S058			human_curated	sewage	
+S059			human_curated	sewage	
+S060			human_curated	sewage	

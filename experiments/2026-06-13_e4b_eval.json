@@ -1,0 +1,751 @@
+{
+  "model": "google/gemma-4-E4B-it",
+  "timestamp": "2026-06-13T11:34:21.592508+00:00",
+  "sentences_file": "out/sentences_e4b.jsonl",
+  "n_total": 45,
+  "n_with_gold": 45,
+  "n_tts_changed": 43,
+  "n_term_replaced": 42,
+  "n_reading_correct": 24,
+  "acc_term_replaced": 0.9333,
+  "acc_reading_correct": 0.5333,
+  "per_term": [
+    {
+      "term": "心筋梗塞",
+      "gold_reading": "しんきんこうそく",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "急な胸の痛みが心筋梗塞のサインかもしれない。",
+          "tts_text": "急な胸の痛みがしんきんこうそくのサインかもしれない。"
+        },
+        {
+          "sentence": "彼は過去に心筋梗塞を経験しているんだって。",
+          "tts_text": "彼は過去にしんきんこうそくを経験しているんだって。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "腰椎椎間板ヘルニア",
+      "gold_reading": "ようついついかんばんへるにあ",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "最近、腰椎椎間板ヘルニアの症状が出てきて困っています。",
+          "tts_text": "最近、こしついついいんばんへるにあうのしょうじょうがでてきてこまっています。"
+        },
+        {
+          "sentence": "あの人は腰椎椎間板ヘルニアで手術をしたそうです。",
+          "tts_text": "あのひとはこしついついいんばんへるにあうでしゅじゅつをしたそうです。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "慢性閉塞性肺疾患",
+      "gold_reading": "まんせいへいそくせいはいしっかん",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "彼は慢性閉塞性肺疾患の治療を続けています。",
+          "tts_text": "彼はかんせいへいそくせいはいしっかんの治療を続けています。"
+        },
+        {
+          "sentence": "慢性閉塞性肺疾患の予防策について話しました。",
+          "tts_text": "かんせいへいそくせいはいしっかんの予防策について話しました。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "心房細動",
+      "gold_reading": "しんぼうさいどう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "先生から心房細動の可能性を指摘されました。",
+          "tts_text": "先生からしんぼうさいどうの可能性を指摘されました。"
+        },
+        {
+          "sentence": "長引く動悸は心房細動のサインかもしれません。",
+          "tts_text": "長引く動悸はしんぼうさいどうのサインかもしれません。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "大動脈弁狭窄症",
+      "gold_reading": "だいどうみゃくべんきょうさくしょう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "先生、大動脈弁狭窄症の検査結果はどうですか？",
+          "tts_text": "先生、だいどうみゃくべんきょうさくしょうの検査結果はどうですか？"
+        },
+        {
+          "sentence": "彼は大動脈弁狭窄症の治療法について詳しく知りたいそうです。",
+          "tts_text": "彼はだいどうみゃくべんきょうさくしょうの治療法について詳しく知りたいそうです。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "糖尿病性腎症",
+      "gold_reading": "とうにょうびょうせいじんしょう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "先生、糖尿病性腎症の進行具合はどうですか。",
+          "tts_text": "先生、とうにょうびょうせいじんしょうのしんこうぐあいはどうですか。"
+        },
+        {
+          "sentence": "最近、糖尿病性腎症の検査結果が出たんだって。",
+          "tts_text": "さいきん、とうにょうびょうせいじんしょうのけんさけっかがでたんだって。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "血栓溶解療法",
+      "gold_reading": "けっせんようかいりょうほう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "医師は血栓溶解療法について詳しく説明してくれた。",
+          "tts_text": "医師はけっせんようかいりょうほうについて詳しく説明してくれた。"
+        },
+        {
+          "sentence": "この病気には血栓溶解療法が必要になる場合がある。",
+          "tts_text": "この病気にはけっせんようかいりょうほうが必要になる場合がある。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "深層学習",
+      "gold_reading": "しんそうがくしゅう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "このAIは深層学習の技術で動いているんだ。",
+          "tts_text": "このAIはしんそうがくしゅうの技術で動いているんだ。"
+        },
+        {
+          "sentence": "深層学習の進化がすごいと最近話題だよ。",
+          "tts_text": "しんそうがくしゅうの進化がすごいと最近話題だよ。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "畳み込みニューラルネットワーク",
+      "gold_reading": "たたみこみにゅーらるねっとわーく",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "この画像認識は畳み込みニューラルネットワークを使っているんだって。",
+          "tts_text": "この画像認識はたたみこみにゅーらるねっとわーくを使っているんだって。"
+        },
+        {
+          "sentence": "より高度な処理には畳み込みニューラルネットワークが必要になるよ。",
+          "tts_text": "より高度な処理にはたたみこみにゅーらるねっとわーくが必要になるよ。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "自然言語処理",
+      "gold_reading": "しぜんげんごしょり",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "自然言語処理の技術が進化しているのがすごいね。",
+          "tts_text": "自然げんごりょうししょりのぎじゅつがしんかしているのがすごいね。"
+        },
+        {
+          "sentence": "彼は自然言語処理の分野を深く学んでいる。",
+          "tts_text": "かれは自然げんごりょうししょりのぶんやをふかくまなんでいる。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "強化学習",
+      "gold_reading": "きょうかがくしゅう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "最近、強化学習の応用例をたくさん見かけるね。",
+          "tts_text": "最近、きょうかかくしゅうの応用例をたくさん見かけるね。"
+        },
+        {
+          "sentence": "このタスクには強化学習のアプローチが最適だと思うよ。",
+          "tts_text": "このタスクにはきょうかかくしゅうのアプローチが最適だと思うよ。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "量子コンピュータ",
+      "gold_reading": "りょうしこんぴゅーた",
+      "n": 3,
+      "n_replaced": 0,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "量子コンピュータの進化が私たちの生活を大きく変えるでしょう。",
+          "tts_text": "量子コンピュータの進化が私たちの生活を大きく変えるでしょう。"
+        },
+        {
+          "sentence": "専門家は量子コンピュータの実用化に期待を寄せています。",
+          "tts_text": "量子コンピュータの実用化に期待を寄せています。"
+        }
+      ],
+      "acc_replaced": 0.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "有機エレクトロルミネッセンス",
+      "gold_reading": "ゆうきえれくとろるみねっせんす",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この新しい有機エレクトロルミネッセンスの材料はすごいね。",
+          "tts_text": "この新しいゆきえれくとろるみねっせんすの材料はすごいね。"
+        },
+        {
+          "sentence": "有機エレクトロルミネッセンスの原理を詳しく説明してくれますか。",
+          "tts_text": "ゆきえれくとろるみねっせんすの原理を詳しく説明してくれますか。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "超伝導体",
+      "gold_reading": "ちょうでんどうたい",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "あの新しい超伝導体はすごい性能だね。",
+          "tts_text": "あの新しいちょうでんどうたいはすごい性能だね。"
+        },
+        {
+          "sentence": "この超伝導体を使った実験をしたいんだ。",
+          "tts_text": "このちょうでんどうたいを使った実験をしたいんだ。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "光触媒",
+      "gold_reading": "こうしょくばい",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この壁紙には光触媒の機能が付いているんだって。",
+          "tts_text": "この壁紙にはひかりしょくばいの機能が付いているんだって。"
+        },
+        {
+          "sentence": "光触媒を使った浄化装置を試してみたいですね。",
+          "tts_text": "ひかりしょくばいを使った浄化装置を試してみたいですね。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    }
+  ],
+  "all_results": [
+    {
+      "id": "0001",
+      "term": "心筋梗塞",
+      "sentence": "急な胸の痛みが心筋梗塞のサインかもしれない。",
+      "tts_text": "急な胸の痛みがしんきんこうそくのサインかもしれない。",
+      "gold_reading": "しんきんこうそく",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0002",
+      "term": "心筋梗塞",
+      "sentence": "彼は過去に心筋梗塞を経験しているんだって。",
+      "tts_text": "彼は過去にしんきんこうそくを経験しているんだって。",
+      "gold_reading": "しんきんこうそく",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0003",
+      "term": "心筋梗塞",
+      "sentence": "心筋梗塞の予防のために運動を始めたよ。",
+      "tts_text": "しんきんこうそくの予防のために運動を始めたよ。",
+      "gold_reading": "しんきんこうそく",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0004",
+      "term": "腰椎椎間板ヘルニア",
+      "sentence": "最近、腰椎椎間板ヘルニアの症状が出てきて困っています。",
+      "tts_text": "最近、こしついついいんばんへるにあうのしょうじょうがでてきてこまっています。",
+      "gold_reading": "ようついついかんばんへるにあ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0005",
+      "term": "腰椎椎間板ヘルニア",
+      "sentence": "あの人は腰椎椎間板ヘルニアで手術をしたそうです。",
+      "tts_text": "あのひとはこしついついいんばんへるにあうでしゅじゅつをしたそうです。",
+      "gold_reading": "ようついついかんばんへるにあ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0006",
+      "term": "腰椎椎間板ヘルニア",
+      "sentence": "専門医に腰椎椎間板ヘルニアについて詳しく相談しました。",
+      "tts_text": "せんもんいによこしついついいんばんへるにあうについてくわしくそうだんしました。",
+      "gold_reading": "ようついついかんばんへるにあ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0007",
+      "term": "慢性閉塞性肺疾患",
+      "sentence": "彼は慢性閉塞性肺疾患の治療を続けています。",
+      "tts_text": "彼はかんせいへいそくせいはいしっかんの治療を続けています。",
+      "gold_reading": "まんせいへいそくせいはいしっかん",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0008",
+      "term": "慢性閉塞性肺疾患",
+      "sentence": "慢性閉塞性肺疾患の予防策について話しました。",
+      "tts_text": "かんせいへいそくせいはいしっかんの予防策について話しました。",
+      "gold_reading": "まんせいへいそくせいはいしっかん",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0009",
+      "term": "慢性閉塞性肺疾患",
+      "sentence": "慢性閉塞性肺疾患の症状が気になって心配です。",
+      "tts_text": "かんせいへいそくせいはいしっかんの症状が気になって心配です。",
+      "gold_reading": "まんせいへいそくせいはいしっかん",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0010",
+      "term": "心房細動",
+      "sentence": "先生から心房細動の可能性を指摘されました。",
+      "tts_text": "先生からしんぼうさいどうの可能性を指摘されました。",
+      "gold_reading": "しんぼうさいどう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0011",
+      "term": "心房細動",
+      "sentence": "長引く動悸は心房細動のサインかもしれません。",
+      "tts_text": "長引く動悸はしんぼうさいどうのサインかもしれません。",
+      "gold_reading": "しんぼうさいどう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0012",
+      "term": "心房細動",
+      "sentence": "最近、心房細動の検査をしてもらうことになったんです。",
+      "tts_text": "最近、しんぼうさいどうの検査をしてもらうことになったんです。",
+      "gold_reading": "しんぼうさいどう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0013",
+      "term": "大動脈弁狭窄症",
+      "sentence": "先生、大動脈弁狭窄症の検査結果はどうですか？",
+      "tts_text": "先生、だいどうみゃくべんきょうさくしょうの検査結果はどうですか？",
+      "gold_reading": "だいどうみゃくべんきょうさくしょう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0014",
+      "term": "大動脈弁狭窄症",
+      "sentence": "彼は大動脈弁狭窄症の治療法について詳しく知りたいそうです。",
+      "tts_text": "彼はだいどうみゃくべんきょうさくしょうの治療法について詳しく知りたいそうです。",
+      "gold_reading": "だいどうみゃくべんきょうさくしょう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0015",
+      "term": "大動脈弁狭窄症",
+      "sentence": "その症状は、大動脈弁狭窄症の可能性も考えられますね。",
+      "tts_text": "その症状は、だいどうみゃくべんきょうさくしょうの可能性も考えられますね。",
+      "gold_reading": "だいどうみゃくべんきょうさくしょう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0016",
+      "term": "糖尿病性腎症",
+      "sentence": "先生、糖尿病性腎症の進行具合はどうですか。",
+      "tts_text": "先生、とうにょうびょうせいじんしょうのしんこうぐあいはどうですか。",
+      "gold_reading": "とうにょうびょうせいじんしょう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0017",
+      "term": "糖尿病性腎症",
+      "sentence": "最近、糖尿病性腎症の検査結果が出たんだって。",
+      "tts_text": "さいきん、とうにょうびょうせいじんしょうのけんさけっかがでたんだって。",
+      "gold_reading": "とうにょうびょうせいじんしょう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0018",
+      "term": "糖尿病性腎症",
+      "sentence": "食事制限が糖尿病性腎症の予防に役立つらしいよ。",
+      "tts_text": "しょくじせいげんがとうにょうびょうせいじんしょうのよぼうにやくだつらしいよ。",
+      "gold_reading": "とうにょうびょうせいじんしょう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0019",
+      "term": "血栓溶解療法",
+      "sentence": "医師は血栓溶解療法について詳しく説明してくれた。",
+      "tts_text": "医師はけっせんようかいりょうほうについて詳しく説明してくれた。",
+      "gold_reading": "けっせんようかいりょうほう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0020",
+      "term": "血栓溶解療法",
+      "sentence": "この病気には血栓溶解療法が必要になる場合がある。",
+      "tts_text": "この病気にはけっせんようかいりょうほうが必要になる場合がある。",
+      "gold_reading": "けっせんようかいりょうほう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0021",
+      "term": "血栓溶解療法",
+      "sentence": "新しい血栓溶解療法が開発されたと聞きましたよ。",
+      "tts_text": "新しいけっせんようかいりょうほうが開発されたと聞きましたよ。",
+      "gold_reading": "けっせんようかいりょうほう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0022",
+      "term": "深層学習",
+      "sentence": "このAIは深層学習の技術で動いているんだ。",
+      "tts_text": "このAIはしんそうがくしゅうの技術で動いているんだ。",
+      "gold_reading": "しんそうがくしゅう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0023",
+      "term": "深層学習",
+      "sentence": "深層学習の進化がすごいと最近話題だよ。",
+      "tts_text": "しんそうがくしゅうの進化がすごいと最近話題だよ。",
+      "gold_reading": "しんそうがくしゅう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0024",
+      "term": "深層学習",
+      "sentence": "深層学習を学ぶために本を読んでいるんだ。",
+      "tts_text": "しんそうがくしゅうを学ぶために本を読んでいるんだ。",
+      "gold_reading": "しんそうがくしゅう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0025",
+      "term": "畳み込みニューラルネットワーク",
+      "sentence": "この画像認識は畳み込みニューラルネットワークを使っているんだって。",
+      "tts_text": "この画像認識はたたみこみにゅーらるねっとわーくを使っているんだって。",
+      "gold_reading": "たたみこみにゅーらるねっとわーく",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0026",
+      "term": "畳み込みニューラルネットワーク",
+      "sentence": "より高度な処理には畳み込みニューラルネットワークが必要になるよ。",
+      "tts_text": "より高度な処理にはたたみこみにゅーらるねっとわーくが必要になるよ。",
+      "gold_reading": "たたみこみにゅーらるねっとわーく",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0027",
+      "term": "畳み込みニューラルネットワーク",
+      "sentence": "先生が畳み込みニューラルネットワークについて詳しく説明してくれた。",
+      "tts_text": "先生がたたみこみにゅーらるねっとわーくについて詳しく説明してくれた。",
+      "gold_reading": "たたみこみにゅーらるねっとわーく",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0028",
+      "term": "自然言語処理",
+      "sentence": "自然言語処理の技術が進化しているのがすごいね。",
+      "tts_text": "自然げんごりょうししょりのぎじゅつがしんかしているのがすごいね。",
+      "gold_reading": "しぜんげんごしょり",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0029",
+      "term": "自然言語処理",
+      "sentence": "彼は自然言語処理の分野を深く学んでいる。",
+      "tts_text": "かれは自然げんごりょうししょりのぶんやをふかくまなんでいる。",
+      "gold_reading": "しぜんげんごしょり",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0030",
+      "term": "自然言語処理",
+      "sentence": "新しいAIは自然言語処理を応用しているんだよ。",
+      "tts_text": "あたらしいえーあいは自然げんごりょうししょりをおうようしているんだよ。",
+      "gold_reading": "しぜんげんごしょり",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0031",
+      "term": "強化学習",
+      "sentence": "最近、強化学習の応用例をたくさん見かけるね。",
+      "tts_text": "最近、きょうかかくしゅうの応用例をたくさん見かけるね。",
+      "gold_reading": "きょうかがくしゅう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0032",
+      "term": "強化学習",
+      "sentence": "このタスクには強化学習のアプローチが最適だと思うよ。",
+      "tts_text": "このタスクにはきょうかかくしゅうのアプローチが最適だと思うよ。",
+      "gold_reading": "きょうかがくしゅう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0033",
+      "term": "強化学習",
+      "sentence": "彼らは強化学習を使ってロボットを訓練しているんだ。",
+      "tts_text": "彼らはきょうかかくしゅうを使ってロボットを訓練しているんだ。",
+      "gold_reading": "きょうかがくしゅう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0034",
+      "term": "量子コンピュータ",
+      "sentence": "量子コンピュータの進化が私たちの生活を大きく変えるでしょう。",
+      "tts_text": "量子コンピュータの進化が私たちの生活を大きく変えるでしょう。",
+      "gold_reading": "りょうしこんぴゅーた",
+      "term_replaced": false,
+      "reading_correct": false,
+      "tts_changed": false
+    },
+    {
+      "id": "0035",
+      "term": "量子コンピュータ",
+      "sentence": "専門家は量子コンピュータの実用化に期待を寄せています。",
+      "tts_text": "量子コンピュータの実用化に期待を寄せています。",
+      "gold_reading": "りょうしこんぴゅーた",
+      "term_replaced": false,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0036",
+      "term": "量子コンピュータ",
+      "sentence": "あの研究室では量子コンピュータのシミュレーションを行っているらしい。",
+      "tts_text": "あの研究室では量子コンピュータのシミュレーションを行っているらしい。",
+      "gold_reading": "りょうしこんぴゅーた",
+      "term_replaced": false,
+      "reading_correct": false,
+      "tts_changed": false
+    },
+    {
+      "id": "0037",
+      "term": "有機エレクトロルミネッセンス",
+      "sentence": "この新しい有機エレクトロルミネッセンスの材料はすごいね。",
+      "tts_text": "この新しいゆきえれくとろるみねっせんすの材料はすごいね。",
+      "gold_reading": "ゆうきえれくとろるみねっせんす",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0038",
+      "term": "有機エレクトロルミネッセンス",
+      "sentence": "有機エレクトロルミネッセンスの原理を詳しく説明してくれますか。",
+      "tts_text": "ゆきえれくとろるみねっせんすの原理を詳しく説明してくれますか。",
+      "gold_reading": "ゆうきえれくとろるみねっせんす",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0039",
+      "term": "有機エレクトロルミネッセンス",
+      "sentence": "有機エレクトロルミネッセンスを用いたディスプレイが人気です。",
+      "tts_text": "ゆきえれくとろるみねっせんすを用いたディスプレイが人気です。",
+      "gold_reading": "ゆうきえれくとろるみねっせんす",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0040",
+      "term": "超伝導体",
+      "sentence": "あの新しい超伝導体はすごい性能だね。",
+      "tts_text": "あの新しいちょうでんどうたいはすごい性能だね。",
+      "gold_reading": "ちょうでんどうたい",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0041",
+      "term": "超伝導体",
+      "sentence": "この超伝導体を使った実験をしたいんだ。",
+      "tts_text": "このちょうでんどうたいを使った実験をしたいんだ。",
+      "gold_reading": "ちょうでんどうたい",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0042",
+      "term": "超伝導体",
+      "sentence": "超伝導体の特性について詳しく教えてください。",
+      "tts_text": "ちょうでんどうたいの特性について詳しく教えてください。",
+      "gold_reading": "ちょうでんどうたい",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0043",
+      "term": "光触媒",
+      "sentence": "この壁紙には光触媒の機能が付いているんだって。",
+      "tts_text": "この壁紙にはひかりしょくばいの機能が付いているんだって。",
+      "gold_reading": "こうしょくばい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0044",
+      "term": "光触媒",
+      "sentence": "光触媒を使った浄化装置を試してみたいですね。",
+      "tts_text": "ひかりしょくばいを使った浄化装置を試してみたいですね。",
+      "gold_reading": "こうしょくばい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0045",
+      "term": "光触媒",
+      "sentence": "光触媒の性能について詳しく教えてもらえますか。",
+      "tts_text": "ひかりしょくばいの性能について詳しく教えてもらえますか。",
+      "gold_reading": "こうしょくばい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    }
+  ]
+}
