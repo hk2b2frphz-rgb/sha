@@ -8,6 +8,9 @@ dataset:
 output:
   dir: experiments/whisper_streaming_eval
   predictions_jsonl: predictions.jsonl
+  # 1発話1行。emits は [経過実時間, 区間開始, 区間終了, 確定テキスト]。
+  # 遅延 = 経過実時間 - 区間終了。predictions.jsonl を短く保つため別ファイル。
+  emissions_jsonl: emissions.jsonl
   summary_json: summary.json
   report_md: report.md
 

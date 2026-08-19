@@ -53,8 +53,29 @@ MODEL_DIR=/path/to/ct2-whisper qsub -V scripts/run_whisper_streaming_eval.pbs
 出力:
 
 - `experiments/whisper_streaming_eval/predictions.jsonl`
+- `experiments/whisper_streaming_eval/emissions.jsonl`
 - `experiments/whisper_streaming_eval/summary.json`
 - `experiments/whisper_streaming_eval/report.md`
+
+## emissions.jsonl（リアルタイム性の可視化用）
+
+逐次デコード中に確定した文字列を、確定した時点の情報つきで1発話1行で記録します。
+`predictions.jsonl` を読みやすい大きさに保つため別ファイルにし、1確定あたりの情報は
+キー名を持たない配列にしています。
+
+```json
+{"id": "0001", "duration_sec": 4.2, "emits": [[1.31, 0.0, 1.2, "活性汚泥法の"], [2.68, 1.2, 2.5, "運転管理では"]]}
+```
+
+`emits` の各要素は `[経過実時間(秒), 区間開始(秒), 区間終了(秒), 確定テキスト]` です。
+
+- 経過実時間: その発話の処理を開始してから確定するまでの秒数
+- 区間開始 / 区間終了: 確定テキストが対応する音声上の位置（`process_iter()` の戻り値）
+- 遅延: `経過実時間 - 区間終了`
+- 最後の要素は `finish()` によるflush分なので、末尾の遅延はここに現れます
+
+`predictions.jsonl` 側にも要約値として `emission_count`、`first_emission_sec`、
+`final_emission_lag_sec` を持たせています。
 
 指標:
 

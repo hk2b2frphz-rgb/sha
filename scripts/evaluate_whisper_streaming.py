@@ -290,26 +290,46 @@ def load_manifest(path: Path, audio_dir: Path) -> list[dict[str, Any]]:
     return records
 
 
-def run_streaming(module: Any, online: Any, wav_path: str, min_chunk_size: float) -> tuple[str, float, float]:
+def run_streaming(
+    module: Any, online: Any, wav_path: str, min_chunk_size: float
+) -> tuple[str, float, float, list[list[Any]]]:
+    """Decode one wav incrementally and record when each commit was emitted.
+
+    Every emission is kept as a compact ``[wall_sec, seg_beg, seg_end, text]``
+    array rather than a dict: these rows are read by humans and LLMs, so the
+    per-emission detail stays terse and lives in its own file.  Emission
+    latency is ``wall_sec - seg_end``.
+    """
     audio = module.load_audio(wav_path)
     duration = len(audio) / float(module.OnlineASRProcessor.SAMPLING_RATE)
     online.init()
     pieces: list[str] = []
+    emissions: list[list[Any]] = []
     beg = 0.0
     start = time.monotonic()
+
+    def record(out: Any) -> None:
+        if not out[2]:
+            return
+        pieces.append(out[2])
+        emissions.append(
+            [
+                round(time.monotonic() - start, 3),
+                round(float(out[0]), 3) if out[0] is not None else None,
+                round(float(out[1]), 3) if out[1] is not None else None,
+                out[2],
+            ]
+        )
+
     while beg < duration:
         end = min(duration, beg + min_chunk_size)
         chunk = module.load_audio_chunk(wav_path, beg, end)
         online.insert_audio_chunk(chunk)
-        out = online.process_iter()
-        if out[2]:
-            pieces.append(out[2])
+        record(online.process_iter())
         beg = end
-    final = online.finish()
-    if final[2]:
-        pieces.append(final[2])
+    record(online.finish())
     elapsed = time.monotonic() - start
-    return "".join(pieces).strip(), duration, elapsed
+    return "".join(pieces).strip(), duration, elapsed, emissions
 
 
 def main() -> None:
@@ -382,12 +402,19 @@ def main() -> None:
     if repetition_ngram_size <= 0:
         raise SystemExit("metrics.repetition_ngram_size must be positive")
     predictions_path = out_dir / str(output_cfg.get("predictions_jsonl", "predictions.jsonl"))
+    # Kept out of predictions.jsonl so that file stays small enough to read.
+    emissions_path = out_dir / str(output_cfg.get("emissions_jsonl", "emissions.jsonl"))
     results: list[dict[str, Any]] = []
     total_audio = 0.0
     total_wall = 0.0
-    with predictions_path.open("w", encoding="utf-8") as fh:
+    with (
+        predictions_path.open("w", encoding="utf-8") as fh,
+        emissions_path.open("w", encoding="utf-8") as efh,
+    ):
         for idx, rec in enumerate(records, 1):
-            hyp, duration, wall = run_streaming(module, online, rec["wav_path"], min_chunk_size)
+            hyp, duration, wall, emissions = run_streaming(
+                module, online, rec["wav_path"], min_chunk_size
+            )
             ref = str(rec.get("sentence") or rec.get("text") or rec.get("tts_text") or "")
             ref_chars = list(normalize_text(ref))
             hyp_chars = list(normalize_text(hyp))
@@ -404,6 +431,11 @@ def main() -> None:
                 "duration_sec": duration,
                 "wall_sec": wall,
                 "rtf": wall / duration if duration else None,
+                "emission_count": len(emissions),
+                "first_emission_sec": emissions[0][0] if emissions else None,
+                "final_emission_lag_sec": (
+                    round(emissions[-1][0] - duration, 3) if emissions else None
+                ),
                 "speed_x": duration / wall if wall else None,
                 "cer": error_rate(ref_chars, hyp_chars),
                 "wer": error_rate(ref_words, hyp_words),
@@ -426,6 +458,18 @@ def main() -> None:
             results.append(row)
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
             fh.flush()
+            efh.write(
+                json.dumps(
+                    {
+                        "id": row["id"],
+                        "duration_sec": round(duration, 3),
+                        "emits": emissions,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            efh.flush()
             print(
                 f"[{idx}/{len(records)}] {row['id']} CER={row['cer']:.3f} "
                 f"WER={row['wer']:.3f} speed={row['speed_x']:.2f}x"
@@ -524,6 +568,9 @@ def main() -> None:
                 f"- total audio: {summary['total_audio_sec']:.2f} sec",
                 f"- total wall: {summary['total_wall_sec']:.2f} sec",
                 f"- predictions: `{predictions_path}`",
+                f"- emissions: `{emissions_path}` "
+                "(per commit: `[wall_sec, seg_beg, seg_end, text]`; "
+                "latency = wall_sec - seg_end)",
             ]
         )
         + "\n",
