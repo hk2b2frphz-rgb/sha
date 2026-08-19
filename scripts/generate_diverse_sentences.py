@@ -237,19 +237,43 @@ def main() -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--max-prefix-reuse", type=int, default=2, help="先頭12文字の重複許容数")
+    ap.add_argument(
+        "--per-term",
+        type=int,
+        default=1,
+        help="1用語あたりの文数。1文だけだとモデルがその文ごと丸暗記し、別の文脈で"
+        "同じ用語が出ると外す (実測: 学習lossは0.0046まで下がったのに評価B-WERは21.7%)。"
+        "同じ用語には必ず違う shape を割り当てる",
+    )
     args = ap.parse_args()
 
     rows = list(csv.DictReader(args.inp.open(encoding="utf-8")))
     rng = random.Random(args.seed)
-    combos = assign_unique_combos(rng, len(rows))
+    combos = assign_unique_combos(rng, len(rows) * args.per_term)
     rng.shuffle(combos)  # 用語の並び順とshape/ctx/subj/tailの相関を消す
 
     out_rows = []
-    for row, combo in zip(rows, combos):
+    cursor = 0
+    for row in rows:
         term = row["Word"]
-        sentence = build_sentence(term, combo)
-        assert term in sentence, f"用語が文に含まれない: {term} / {sentence}"
-        out_rows.append({**row, "Sentance": sentence})
+        used_shapes: set[int] = set()
+        for _ in range(args.per_term):
+            # 同じ用語に同じ shape を割り当てない。文体まで同じでは文脈を
+            # 増やした意味が薄い。
+            while cursor < len(combos) and combos[cursor][0] in used_shapes:
+                cursor += 1
+            if cursor >= len(combos):
+                cursor, used_shapes = 0, set()
+            combo = combos[cursor]
+            cursor += 1
+            used_shapes.add(combo[0])
+            sentence = build_sentence(term, combo)
+            assert term in sentence, f"用語が文に含まれない: {term} / {sentence}"
+            out_rows.append({**row, "Sentance": sentence})
+
+    for i, r in enumerate(out_rows, 1):  # per-term>1 で行が増えるので振り直す
+        if "Number" in r:
+            r["Number"] = i
 
     # ---- 検証: 前回問題になった「先頭12文字の使い回し」を直接チェック ----
     prefixes = collections.Counter(r["Sentance"][:12] for r in out_rows)
