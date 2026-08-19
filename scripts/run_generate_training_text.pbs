@@ -22,6 +22,8 @@ set -euo pipefail
 REPO="${REPO:-${PBS_O_WORKDIR:-$(pwd)}}"
 [[ -d "$REPO" ]] || { echo "ERROR: REPO directory not found: $REPO" >&2; exit 1; }
 cd "$REPO"
+# shellcheck source=scripts/chain_next.sh
+source "$REPO/scripts/chain_next.sh"
 MIL="${MIL:-}"
 
 RUN_ROOT="${RUN_ROOT:-out/whisper_domain_ft/default}"
@@ -230,3 +232,5 @@ echo "domain_hint:        ${DOMAIN_HINT:-<auto from each term>}"
 [[ -s "$CORPUS" ]] || { echo "ERROR: corpus was not created: $CORPUS" >&2; exit 1; }
 touch "$RUN_ROOT/text.done"
 echo "stage 1 complete: $CORPUS"
+
+chain_next "$REPO/scripts/run_synthesize_training_audio.pbs" "stage 2 (term_tts)"

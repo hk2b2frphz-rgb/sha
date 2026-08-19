@@ -47,21 +47,44 @@ fi
 [[ -s "$annotations" ]] || { echo "ERROR: annotations file is missing or empty: $annotations" >&2; exit 1; }
 
 run_root="${RUN_ROOT:-$REPO/out/whisper_domain_ft/run_$(date +%Y%m%d_%H%M%S)}"
+mkdir -p "$run_root/logs"
 common_vars="REPO=$REPO,MIL=$MIL,PROXY_URL=$PROXY_URL,RUN_ROOT=$run_root"
 
-text_job=$(qsub \
-    -v "$common_vars,ANNOTATIONS=$annotations" \
-    "$REPO/scripts/run_generate_training_text.pbs")
+# Each qsub is reported on its own so a rejected stage never dies silently and
+# leaves the earlier stages running with no successor.
+submit() {
+    local label=$1 script=$2 extra=$3 depend=$4 out
+    local -a cmd=(qsub -o "$run_root/logs/")
+    [[ -n "$depend" ]] && cmd+=(-W "depend=afterok:$depend")
+    cmd+=(-v "$common_vars${extra:+,$extra}" "$script")
+    if ! out=$("${cmd[@]}" 2>&1); then
+        echo "ERROR: failed to submit $label" >&2
+        echo "$out" >&2
+        echo "resubmit with:" >&2
+        printf ' ' >&2; printf ' %q' "${cmd[@]}" >&2; echo >&2
+        return 1
+    fi
+    printf '%s' "$out"
+}
 
-tts_job=$(qsub \
-    -W "depend=afterok:$text_job" \
-    -v "$common_vars" \
-    "$REPO/scripts/run_synthesize_training_audio.pbs")
+# CHAIN=1 (default): stage 1 submits stage 2 when it finishes, and stage 2
+# submits stage 3.  Held `depend=afterok` jobs never recover when the PBS
+# server cannot report the parent's exit status, so chaining is the default.
+# CHAIN=0 restores the original three-job dependency submission.
+if [[ "${CHAIN:-1}" == "1" ]]; then
+    text_job=$(submit "stage 1 (term_text)" "$REPO/scripts/run_generate_training_text.pbs" \
+        "ANNOTATIONS=$annotations,CHAIN=1" "")
+    printf 'run_root=%s\ntext=%s\nlogs=%s\n' "$run_root" "$text_job" "$run_root/logs"
+    echo 'stages 2 and 3 are submitted by the preceding job when it succeeds'
+    exit 0
+fi
 
-train_job=$(qsub \
-    -W "depend=afterok:$tts_job" \
-    -v "$common_vars" \
-    "$REPO/scripts/run_whisper_decoder_train.pbs")
+text_job=$(submit "stage 1 (term_text)" "$REPO/scripts/run_generate_training_text.pbs" \
+    "ANNOTATIONS=$annotations,CHAIN=0" "")
+tts_job=$(submit "stage 2 (term_tts)" "$REPO/scripts/run_synthesize_training_audio.pbs" \
+    "CHAIN=0" "$text_job")
+train_job=$(submit "stage 3 (term_ft)" "$REPO/scripts/run_whisper_decoder_train.pbs" \
+    "CHAIN=0" "$tts_job")
 
-printf 'run_root=%s\ntext=%s\ntts=%s\ntrain=%s\n' \
-    "$run_root" "$text_job" "$tts_job" "$train_job"
+printf 'run_root=%s\ntext=%s\ntts=%s\ntrain=%s\nlogs=%s\n' \
+    "$run_root" "$text_job" "$tts_job" "$train_job" "$run_root/logs"

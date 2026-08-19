@@ -18,6 +18,8 @@ set -euo pipefail
 REPO="${REPO:-${PBS_O_WORKDIR:-$(pwd)}}"
 [[ -d "$REPO" ]] || { echo "ERROR: REPO directory not found: $REPO" >&2; exit 1; }
 cd "$REPO"
+# shellcheck source=scripts/chain_next.sh
+source "$REPO/scripts/chain_next.sh"
 MIL="${MIL:-}"
 
 RUN_ROOT="${RUN_ROOT:-out/whisper_domain_ft/default}"
@@ -357,3 +359,5 @@ done
 }
 touch "$RUN_ROOT/tts.done"
 echo "stage 2 complete: train=$TRAIN_MANIFEST dev=$DEV_MANIFEST"
+
+chain_next "$REPO/scripts/run_whisper_decoder_train.pbs" "stage 3 (term_ft)"
