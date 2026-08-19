@@ -105,6 +105,12 @@ fi
 # --- 借りたマシンで動かす中身 -----------------------------------------------
 read -r -d '' ONSTART <<ONSTART_EOF || true
 set -eux
+# 失敗の検知をログ本文のパターン照合に頼らない。set -e で落ちた場合も
+# 明示的な exit の場合も、必ず ONSTART_FAILED を出してから終わる。
+# (v2 では HF の ConnectionError が "Traceback|ERROR:" のどれにも当たらず、
+#  監視側が失敗に気付けないまま 2.5 時間分課金された)
+_ONSTART_DONE=0
+trap '[ "\$_ONSTART_DONE" = 1 ] || echo "ONSTART_FAILED rc=\$?"' EXIT
 export DEBIAN_FRONTEND=noninteractive
 # hf_transfer を「有効化だけして未インストール」にすると、huggingface_hub は
 # ダウンロード時に ValueError を投げて学習が落ちる (実際に落ちた)。
@@ -144,6 +150,7 @@ export WORK_ROOT
 bash scripts/run_whisper_train.pbs
 
 hf upload "$OUT_REPO" "\$WORK_ROOT/ct2" --repo-type model $PRIVATE_FLAG
+_ONSTART_DONE=1
 echo "TRAINING_COMPLETE"
 ONSTART_EOF
 
@@ -178,7 +185,12 @@ trap destroy EXIT INT TERM
 # ローカル側の締切は MAX_HOURS + 固定作業分 (image pull / uv sync / モデル DL /
 # 結果アップロード)。TTS 初回はここが伸びるので余裕を多めに取る。
 DEADLINE=$(python3 -c "import time; print(int(time.time() + $MAX_HOURS * 3600 + 3600))")
-echo "=== 監視中 (Ctrl-C でも破棄されます) ==="
+# ログが1行も動かない状態が続いたら落ちたとみなす。番兵を出さずに死ぬ経路
+# (OOM killer / ホスト側の停止 / onstart 自体が起動しない) を拾うための保険。
+STALL_MINUTES="${STALL_MINUTES:-25}"
+LAST_SIG=""
+LAST_CHANGE="$(date +%s)"
+echo "=== 監視中 (Ctrl-C でも破棄されます / 無進捗 ${STALL_MINUTES}分で打ち切り) ==="
 
 while [[ "$(date +%s)" -lt "$DEADLINE" ]]; do
     sleep 60
@@ -190,9 +202,22 @@ while [[ "$(date +%s)" -lt "$DEADLINE" ]]; do
         echo "=== 完了 -> https://huggingface.co/$OUT_REPO ==="
         exit 0
     fi
-    if printf '%s' "$LOG" | grep -qE "Traceback|CUDA out of memory|^ERROR:"; then
+    # ONSTART_FAILED が主。残りは番兵より先に気付けたとき用の早期打ち切り。
+    if printf '%s' "$LOG" | grep -qE "ONSTART_FAILED|Traceback|CUDA out of memory|^ERROR:"; then
         echo ""
         echo "=== インスタンス側でエラー。破棄して終了します ===" >&2
+        vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
+        exit 1
+    fi
+
+    SIG="$(printf '%s' "$LOG" | md5sum | cut -d' ' -f1)"
+    NOW="$(date +%s)"
+    if [[ "$SIG" != "$LAST_SIG" ]]; then
+        LAST_SIG="$SIG"
+        LAST_CHANGE="$NOW"
+    elif (( NOW - LAST_CHANGE > STALL_MINUTES * 60 )); then
+        echo ""
+        echo "=== ${STALL_MINUTES}分ログが動きません。破棄して終了します ===" >&2
         vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
         exit 1
     fi
