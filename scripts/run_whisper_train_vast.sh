@@ -116,8 +116,17 @@ set -eux
 # 明示的な exit の場合も、必ず ONSTART_FAILED を出してから終わる。
 # (v2 では HF の ConnectionError が "Traceback|ERROR:" のどれにも当たらず、
 #  監視側が失敗に気付けないまま 2.5 時間分課金された)
+# 番兵の文字列は関数の中に置く。トラップ本体に直書きすると set -x が
+# 登録行ごとトレース出力し、監視側がその文字列を拾って「失敗した」と
+# 誤判定する (実際に健全な学習を1本落とした)。関数定義は実行されるまで
+# トレースされないので、登録行は "trap _onstart_exit EXIT" としか出ない。
 _ONSTART_DONE=0
-trap '[ "\$_ONSTART_DONE" = 1 ] || echo "ONSTART_FAILED rc=\$?"' EXIT
+_onstart_exit() {
+    _rc=\$?
+    [ "\$_ONSTART_DONE" = 1 ] && return 0
+    echo "ONSTART_FAILED rc=\$_rc"
+}
+trap _onstart_exit EXIT
 export DEBIAN_FRONTEND=noninteractive
 # hf_transfer を「有効化だけして未インストール」にすると、huggingface_hub は
 # ダウンロード時に ValueError を投げて学習が落ちる (実際に落ちた)。
@@ -267,7 +276,9 @@ monitor_instance() {
         fi
         # ONSTART_FAILED が主。残りは番兵より先に気付けたとき用の早期打ち切り。
         # 判定は必ず stdout (インスタンスのログ本文) だけに対して行う。
-        if printf '%s' "$log" | grep -qE "ONSTART_FAILED|Traceback|CUDA out of memory|^ERROR:"; then
+        # 行頭に固定する。set -x のトレース行は "+ " で始まるので、
+        # スクリプト本文に現れた文字列を失敗と取り違えない。
+        if printf '%s' "$log" | grep -qE "^(ONSTART_FAILED|Traceback|ERROR:)|CUDA out of memory"; then
             echo "" >&2
             echo "=== インスタンス側でエラー。破棄して終了します ===" >&2
             vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
