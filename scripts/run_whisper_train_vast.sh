@@ -105,8 +105,13 @@ fi
 # --- 借りたマシンで動かす中身 -----------------------------------------------
 read -r -d '' ONSTART <<ONSTART_EOF || true
 set -eux
-export HF_HUB_ENABLE_HF_TRANSFER=1 DEBIAN_FRONTEND=noninteractive
-pip install -q uv "huggingface_hub[cli,hf_transfer]"
+export DEBIAN_FRONTEND=noninteractive
+# hf_transfer を「有効化だけして未インストール」にすると、huggingface_hub は
+# ダウンロード時に ValueError を投げて学習が落ちる (実際に落ちた)。
+# extra 指定 [hf_transfer] は現行版で廃止され警告のみで無視されるので、
+# パッケージを直接入れ、入った場合にだけ有効化する。
+pip install -q uv huggingface_hub
+python -c "import hf_transfer" 2>/dev/null && export HF_HUB_ENABLE_HF_TRANSFER=1 || true
 git clone --depth 1 --branch "$BRANCH" "$REPO_URL" /workspace/repo
 cd /workspace/repo
 
@@ -146,7 +151,7 @@ ONSTART_EOF
 CREATE_ARGS=(create instance "$OFFER_ID"
     --image "$IMAGE"
     --disk "$DISK"
-    --env "-e HF_TOKEN=$HF_TOKEN -e HF_HUB_ENABLE_HF_TRANSFER=1"
+    --env "-e HF_TOKEN=$HF_TOKEN"
     --onstart-cmd "$ONSTART"
     --raw)
 [[ "$SPOT" == "1" ]] && CREATE_ARGS+=(--bid "$OFFER_DPH")
@@ -158,7 +163,9 @@ destroy() {
     echo ""
     echo "=== instance $INSTANCE_ID を破棄 ==="
     for _ in 1 2 3 4 5; do
-        vastai destroy instance "$INSTANCE_ID" && return 0
+        # -y は必須: これが無いと対話確認 ([y/N]) で止まり、非対話実行では
+        # Aborted になって課金が続く。実際にそれでインスタンスが生き残った。
+        vastai destroy instance -y "$INSTANCE_ID" && return 0
         sleep 5
     done
     echo "!! $INSTANCE_ID を破棄できませんでした。今すぐ手で消してください:" >&2
