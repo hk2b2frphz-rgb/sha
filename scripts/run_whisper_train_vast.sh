@@ -142,7 +142,22 @@ mkdir -p "\$WORK_ROOT"
 
 # 合成済みデータを取ってくる。TTS は CPU コンテナ側で済ませておく前提なので、
 # ここに無ければ即座に失敗させる (借りた GPU で TTS を回すのが一番もったいない)。
-hf download "$DATA_REPO" --repo-type dataset --local-dir "\$WORK_ROOT"
+#
+# データセットは音声3795本 = 3800ファイルあり、1本でも取り損ねると全体が落ちる。
+# 実際に xet 経由で ConnectionError が2回発生して学習を落とした。hf download は
+# 取得済みのファイルを飛ばすので、再試行は毎回そのぶん前に進む。
+# xet 側で失敗しているので、素の HTTP 経路にも落とせるようにしておく。
+export HF_HUB_DISABLE_XET=\${HF_HUB_DISABLE_XET:-1}
+_dl_ok=0
+for _try in 1 2 3 4 5; do
+    if hf download "$DATA_REPO" --repo-type dataset --local-dir "\$WORK_ROOT"; then
+        _dl_ok=1
+        break
+    fi
+    echo "[data] 取得に失敗 (試行 \$_try/5)。取得済みを保持したまま再試行する"
+    sleep \$((_try * 20))
+done
+[ "\$_dl_ok" = 1 ] || { echo "[data] 5回試しても $DATA_REPO を取得できませんでした" >&2; exit 1; }
 test -s "\$WORK_ROOT/train_manifest.jsonl" || {
     echo "ERROR: train_manifest.jsonl が $DATA_REPO にありません。" >&2
     echo "       先に CPU 側で: bash scripts/run_cpu_dataprep.sh <csv>" >&2
@@ -165,7 +180,17 @@ export WORK_ROOT
 # train_manifest.jsonl があるので run_whisper_train.pbs は step 1 の TTS を飛ばす。
 bash scripts/run_whisper_train.pbs
 
-hf upload "$OUT_REPO" "\$WORK_ROOT/ct2" --repo-type model $PRIVATE_FLAG
+# 学習し終えた成果物を落とすのが一番もったいないので、ここも再試行する。
+_ul_ok=0
+for _try in 1 2 3 4 5; do
+    if hf upload "$OUT_REPO" "\$WORK_ROOT/ct2" --repo-type model $PRIVATE_FLAG; then
+        _ul_ok=1
+        break
+    fi
+    echo "[out] アップロードに失敗 (試行 \$_try/5)。再試行する"
+    sleep \$((_try * 20))
+done
+[ "\$_ul_ok" = 1 ] || { echo "[out] $OUT_REPO へアップロードできませんでした" >&2; exit 1; }
 _ONSTART_DONE=1
 echo "TRAINING_COMPLETE"
 ONSTART_EOF
@@ -274,11 +299,16 @@ monitor_instance() {
             rm -f "$errfile"
             return 0
         fi
-        # ONSTART_FAILED が主。残りは番兵より先に気付けたとき用の早期打ち切り。
-        # 判定は必ず stdout (インスタンスのログ本文) だけに対して行う。
-        # 行頭に固定する。set -x のトレース行は "+ " で始まるので、
-        # スクリプト本文に現れた文字列を失敗と取り違えない。
-        if printf '%s' "$log" | grep -qE "^(ONSTART_FAILED|Traceback|ERROR:)|CUDA out of memory"; then
+        # 判定は番兵だけで行う。Traceback や CUDA out of memory を拾う早期打ち切りも
+        # 入れていたが、リトライで回復する途中の失敗 (hf download の ConnectionError
+        # など) まで殺してしまう。onstart はどの失敗経路でも番兵を出してから終わるので、
+        # 番兵を待てば取りこぼしはなく、set -e で即座に出るため遅れもない。
+        # 番兵すら出せずに死ぬ経路は下のストール判定と締切が受け持つ。
+        #
+        # stdout (インスタンスのログ本文) だけを見て、行頭に固定する。stderr には
+        # vastai CLI 自身の失敗が出るし、set -x のトレース行は "+ " で始まるので、
+        # どちらもインスタンス側の失敗と取り違えない。
+        if printf '%s' "$log" | grep -qE "^ONSTART_FAILED"; then
             echo "" >&2
             echo "=== インスタンス側でエラー。破棄して終了します ===" >&2
             vastai logs "$INSTANCE_ID" --tail 120 >&2 || true
