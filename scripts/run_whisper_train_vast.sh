@@ -39,6 +39,7 @@ DISK="${DISK:-60}"
 SPOT="${SPOT:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 IMAGE="${IMAGE:-pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel}"
+MIN_INET_UP="${MIN_INET_UP:-100}"
 
 # --- run_whisper_train.pbs にそのまま渡す変数 ---
 NUM_SHARDS="${NUM_SHARDS:-1}"
@@ -47,9 +48,11 @@ NUM_SHARDS="${NUM_SHARDS:-1}"
 FT_MODE="${FT_MODE:-full}"
 BASE_MODEL="${BASE_MODEL:-openai/whisper-large-v3-turbo}"
 MIXED_PRECISION="${MIXED_PRECISION:-bf16}"
-# 借りたマシンは終了時に破棄されるので、checkpoint は毎回 HF へ退避し、
-# 起動時に取り戻して再開する。既定は <out-repo>-ckpt。
-CHECKPOINT_REPO="${CHECKPOINT_REPO:-${OUT_REPO}-ckpt}"
+# 中間 checkpoint の HF 退避は既定で切る。実測で学習は 1エポック約5分なのに対し、
+# checkpoint は optimizer.pt を含めて 1.38GB あり、退避に1エポックあたり1時間半
+# かかった。学習全体より退避のほうが桁違いに高くつく。
+# 学習が長くなる構成でだけ CHECKPOINT_REPO=<repo> を明示する。
+CHECKPOINT_REPO="${CHECKPOINT_REPO-}"
 RESUME="${RESUME:-1}"
 # 学習済みモデルは学習に使った用語を復元できる。既定は非公開。
 PRIVATE="${PRIVATE:-1}"
@@ -71,7 +74,10 @@ command -v vastai >/dev/null || { echo "vastai CLI がありません: pip insta
 
 # --- 最安の提示を選ぶ -------------------------------------------------------
 # inet_down を高めに要求する: turbo の重みと Kokoro/unidic の DL 時間も課金対象。
-QUERY="gpu_name in [${GPU}] num_gpus>=${NUM_SHARDS} disk_space>=${DISK} inet_down>=300 reliability>0.98 rentable=true"
+# inet_up も必ず見る。下りだけを条件にしていたら、上り 240kB/s のホストを
+# 引いて checkpoint (optimizer.pt 1.38GB) の退避に1エポックあたり1時間半かかり、
+# 4時間の実行が学習を終えられなかった。成果物の送出も同じ経路を通る。
+QUERY="gpu_name in [${GPU}] num_gpus>=${NUM_SHARDS} disk_space>=${DISK} inet_down>=300 inet_up>=${MIN_INET_UP} reliability>0.98 rentable=true"
 
 echo "=== 提示を検索: $QUERY ==="
 
@@ -133,6 +139,9 @@ export DEBIAN_FRONTEND=noninteractive
 # extra 指定 [hf_transfer] は現行版で廃止され警告のみで無視されるので、
 # パッケージを直接入れ、入った場合にだけ有効化する。
 pip install -q uv huggingface_hub
+# hf_transfer は「有効化だけして未インストール」だと huggingface_hub が
+# ValueError を投げて落ちる。入れてから、入った場合にだけ有効化する。
+pip install -q hf_transfer || true
 python -c "import hf_transfer" 2>/dev/null && export HF_HUB_ENABLE_HF_TRANSFER=1 || true
 git clone --depth 1 --branch "$BRANCH" "$REPO_URL" /workspace/repo
 cd /workspace/repo
@@ -148,15 +157,38 @@ mkdir -p "\$WORK_ROOT"
 # 取得済みのファイルを飛ばすので、再試行は毎回そのぶん前に進む。
 # xet 側で失敗しているので、素の HTTP 経路にも落とせるようにしておく。
 export HF_HUB_DISABLE_XET=\${HF_HUB_DISABLE_XET:-1}
+# 新しい dataprep は音声を tts_data.tar 1本にまとめて上げる。まずそれだけを
+# 取りに行く。個別ファイル (tts_data/**) も repo に残っている場合があり、
+# 全部取ると同じ音声を二重に落とすことになるので、--include で絞る。
+_dl() {
+    hf download "$DATA_REPO" --repo-type dataset --local-dir "\$WORK_ROOT" "\$@"
+}
 _dl_ok=0
 for _try in 1 2 3 4 5; do
-    if hf download "$DATA_REPO" --repo-type dataset --local-dir "\$WORK_ROOT"; then
+    if _dl --include "*.jsonl" --include "tts_data.tar"; then
         _dl_ok=1
         break
     fi
     echo "[data] 取得に失敗 (試行 \$_try/5)。取得済みを保持したまま再試行する"
     sleep \$((_try * 20))
 done
+
+if [ "\$_dl_ok" = 1 ] && [ -f "\$WORK_ROOT/tts_data.tar" ]; then
+    echo "[data] tts_data.tar を展開する"
+    tar -C "\$WORK_ROOT" -xf "\$WORK_ROOT/tts_data.tar"
+else
+    # tar を持たない古い形式のデータセット。個別ファイルを取りに行く。
+    echo "[data] tts_data.tar が無いので個別ファイルを取得する"
+    _dl_ok=0
+    for _try in 1 2 3 4 5; do
+        if _dl; then
+            _dl_ok=1
+            break
+        fi
+        echo "[data] 取得に失敗 (試行 \$_try/5)。取得済みを保持したまま再試行する"
+        sleep \$((_try * 20))
+    done
+fi
 [ "\$_dl_ok" = 1 ] || { echo "[data] 5回試しても $DATA_REPO を取得できませんでした" >&2; exit 1; }
 test -s "\$WORK_ROOT/train_manifest.jsonl" || {
     echo "ERROR: train_manifest.jsonl が $DATA_REPO にありません。" >&2
@@ -298,7 +330,7 @@ monitor_instance() {
         # 経過時間と実際の最終行を毎回出す。
         printf '[%3d分] %s\n' \
             "$(( ($(date +%s) - started_at) / 60 ))" \
-            "$(printf '%s' "$log" | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-160)"
+            "$(printf '%s' "$log" | tr '\r' '\n' | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-160)"
 
         if printf '%s' "$log" | grep -q TRAINING_COMPLETE; then
             rm -f "$errfile"
