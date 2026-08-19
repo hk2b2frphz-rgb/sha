@@ -114,11 +114,18 @@ if [[ -n "${DATA_REPO:-}" ]]; then
     # PRIVATE=0 を明示する。
     PRIVATE_FLAG=()
     [[ "${PRIVATE:-1}" == "1" ]] && PRIVATE_FLAG=(--private)
+    # 音声は1つの tar にまとめて上げる。個別ファイルのまま上げると、借りた GPU 側で
+    # 3800ファイルを1本ずつ取得することになり、実測で数十分かかるうえ、1本でも
+    # 取り損ねると学習全体が落ちる (xet 経由の ConnectionError で実際に2回落ちた)。
+    # tar なら1ファイルなので取得は数分で済み、失敗の機会も1回に減る。
+    echo "音声を tar にまとめています..."
+    tar -C "$OUT_DIR" -cf "$OUT_DIR/tts_data.tar" tts_data
+    echo "  tts_data.tar: $(du -h "$OUT_DIR/tts_data.tar" | cut -f1)"
     hf upload "$DATA_REPO" "$OUT_DIR" --repo-type dataset "${PRIVATE_FLAG[@]}" \
         --include "train_manifest.jsonl" \
         --include "train.jsonl" \
         --include "dev.jsonl" \
-        --include "tts_data/**"
+        --include "tts_data.tar"
     echo "退避完了: https://huggingface.co/datasets/$DATA_REPO"
     echo ""
     echo "次: 学習だけ GPU を借りる"
