@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+#PBS -S /bin/bash
+#PBS -N term_text
+#PBS -q xan_s
+#PBS -l select=1:res=small
+#PBS -l walltime=08:00:00
+#PBS -j oe
+#PBS -V
+
+# Stage 1/3: annotations.tsv -> validated Whisper training corpus.
+#
+# Qwen3.6-27B runs in the Miltoka vLLM environment.  The client sends concurrent
+# OpenAI-compatible requests, so vLLM continuously batches the terms.  If a
+# separately managed vLLM server already exists, pass VLLM_BASE_URL and this
+# job will not launch another server.
+#
+# Example:
+#   qsub -v "REPO=/path/to/term2speech,MIL=/path/to/miltoka,PROXY_URL=http://proxy:8080" \
+#       scripts/run_generate_training_text.pbs
+
+set -euo pipefail
+REPO="${REPO:-${PBS_O_WORKDIR:-$(pwd)}}"
+[[ -d "$REPO" ]] || { echo "ERROR: REPO directory not found: $REPO" >&2; exit 1; }
+cd "$REPO"
+# shellcheck source=scripts/chain_next.sh
+source "$REPO/scripts/chain_next.sh"
+MIL="${MIL:-}"
+
+RUN_ROOT="${RUN_ROOT:-out/whisper_domain_ft/default}"
+ANNOTATIONS="${ANNOTATIONS:-data/annotations.tsv}"
+CORPUS="${CORPUS:-$RUN_ROOT/corpus.jsonl}"
+SENTENCES_PER_TERM="${SENTENCES_PER_TERM:-12}"
+REPLAY_RATIO="${REPLAY_RATIO:-1.0}"
+CONTROL_RATIO="${CONTROL_RATIO:-0.10}"
+GEN_CONCURRENCY="${GEN_CONCURRENCY:-8}"
+GEN_RETRIES="${GEN_RETRIES:-5}"
+DOMAIN_HINT="${DOMAIN_HINT:-}"
+PROMPT_MAX_TERMS="${PROMPT_MAX_TERMS:-200}"
+PROMPT_MAX_CHARS="${PROMPT_MAX_CHARS:-1200}"
+SEED="${SEED:-42}"
+
+# Keep the vLLM runtime separate from the qwen-tts/Whisper project env.  These
+# variables must be executable paths (not shell snippets with spaces).
+if [[ -n "${VLLM_CMD:-}" ]]; then
+    VLLM_CMD="$VLLM_CMD"
+elif [[ -n "$MIL" ]]; then
+    VLLM_CMD="$MIL/.venv_vllm_qwen_10000/bin/vllm"
+else
+    VLLM_CMD="vllm"
+fi
+if [[ -n "${CLIENT_PYTHON:-}" ]]; then
+    CLIENT_PYTHON="$CLIENT_PYTHON"
+elif [[ -x "$REPO/.venv/bin/python" ]]; then
+    CLIENT_PYTHON="$REPO/.venv/bin/python"
+else
+    CLIENT_PYTHON="python3"
+fi
+
+mkdir -p "$RUN_ROOT" experiments/pbs_logs
+JOB_ID_RAW="${PBS_JOBID:-local_$(date +%Y%m%d_%H%M%S)}"
+JOB_TAG="${JOB_ID_RAW%%.*}"
+JOB_LOG="experiments/pbs_logs/domain_text_${JOB_TAG:-local}.log"
+exec > >(tee -a "$JOB_LOG") 2>&1
+
+[[ -s "$ANNOTATIONS" ]] || { echo "ERROR: missing annotations: $ANNOTATIONS" >&2; exit 1; }
+command -v "$CLIENT_PYTHON" >/dev/null 2>&1 || { echo "ERROR: CLIENT_PYTHON not found: $CLIENT_PYTHON" >&2; exit 1; }
+"$CLIENT_PYTHON" -c 'import openai' >/dev/null 2>&1 || {
+    echo "ERROR: the client Python environment needs the openai package" >&2
+    exit 1
+}
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
+fi
+
+VLLM_TP="${VLLM_TP:-1}"
+if ! [[ "$VLLM_TP" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: VLLM_TP must be a positive integer" >&2
+    exit 1
+fi
+
+# A BF16 27B checkpoint needs roughly 56 GB before KV/runtime overhead.  Use the
+# official FP8 checkpoint automatically when the requested tensor-parallel pool
+# has less than 65 GB in aggregate, while keeping an explicit override authoritative.
+if [[ -z "${LLM_MODEL:-}" && -z "${VLLM_BASE_URL:-}" ]]; then
+    if [[ "${OFFLINE:-0}" == "1" ]]; then
+        # prestage_offline.sh caches this compact official checkpoint by default.
+        LLM_MODEL="Qwen/Qwen3.6-27B-FP8"
+        echo "OFFLINE=1; selecting the default pre-staged FP8 checkpoint"
+    else
+        LLM_MODEL="Qwen/Qwen3.6-27B"
+    fi
+    if [[ "${OFFLINE:-0}" != "1" ]] && command -v nvidia-smi >/dev/null 2>&1; then
+        GPU_MEMORY_MB="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n1 | tr -d ' ')"
+        if [[ "$GPU_MEMORY_MB" =~ ^[0-9]+$ ]] && ((GPU_MEMORY_MB * VLLM_TP < 65000)); then
+            LLM_MODEL="Qwen/Qwen3.6-27B-FP8"
+            echo "GPU pool is $((GPU_MEMORY_MB * VLLM_TP)) MiB; selecting official FP8 checkpoint"
+        fi
+    fi
+fi
+
+VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
+VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.92}"
+if [[ -n "${GPU_LIST:-}" ]]; then
+    CUDA_VISIBLE_DEVICES="$GPU_LIST"
+else
+    CUDA_VISIBLE_DEVICES="$(seq -s, 0 $((VLLM_TP - 1)))"
+fi
+export CUDA_VISIBLE_DEVICES
+IFS=',' read -r -a GPU_IDS <<< "$CUDA_VISIBLE_DEVICES"
+[[ "${#GPU_IDS[@]}" -eq "$VLLM_TP" ]] || {
+    echo "ERROR: GPU_LIST has ${#GPU_IDS[@]} entries but VLLM_TP=$VLLM_TP" >&2
+    exit 1
+}
+
+if [[ "${OFFLINE:-0}" == "1" ]]; then
+    export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+fi
+if [[ -f "$PWD/scripts/setup_proxy.sh" && "${OFFLINE:-0}" != "1" ]]; then
+    # shellcheck source=/dev/null
+    source "$PWD/scripts/setup_proxy.sh"
+fi
+
+server_pid=""
+cleanup() {
+    if [[ -n "$server_pid" ]]; then
+        kill "$server_pid" 2>/dev/null || true
+        wait "$server_pid" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT INT TERM
+
+if [[ -n "${VLLM_BASE_URL:-}" ]]; then
+    API_BASE="${VLLM_BASE_URL%/}"
+    API_BASE="${API_BASE%/v1}/v1"
+    if [[ -z "${LLM_MODEL:-}" ]]; then
+        LLM_MODEL="$("$CLIENT_PYTHON" - "$API_BASE" "${VLLM_API_KEY:-EMPTY}" <<'PY'
+import sys
+from openai import OpenAI
+
+models = OpenAI(base_url=sys.argv[1], api_key=sys.argv[2], timeout=30).models.list().data
+if not models:
+    raise SystemExit("external vLLM server returned an empty model list")
+print(models[0].id)
+PY
+)"
+        [[ -n "$LLM_MODEL" ]] || { echo "ERROR: could not discover external served model" >&2; exit 1; }
+        echo "Discovered external served model: $LLM_MODEL"
+    fi
+    echo "Using external vLLM server: $API_BASE"
+else
+    command -v "$VLLM_CMD" >/dev/null 2>&1 || {
+        echo "ERROR: vLLM is unavailable. Set VLLM_CMD or VLLM_BASE_URL." >&2
+        exit 1
+    }
+    VLLM_BIN_DIR="$(dirname "$(command -v "$VLLM_CMD")")"
+    export PATH="$VLLM_BIN_DIR:$PATH"
+    command -v ninja >/dev/null 2>&1 || {
+        echo "ERROR: ninja is unavailable in the vLLM environment: $VLLM_BIN_DIR" >&2
+        exit 1
+    }
+    JOB_DIGITS="${JOB_TAG//[!0-9]/}"
+    JOB_DIGITS="${JOB_DIGITS: -6}"
+    [[ -n "$JOB_DIGITS" ]] || JOB_DIGITS="$$"
+    VLLM_PORT="${VLLM_PORT:-$((18000 + (10#$JOB_DIGITS % 1000)))}"
+    API_BASE="http://127.0.0.1:${VLLM_PORT}/v1"
+    SERVER_LOG="$RUN_ROOT/vllm_text_server.log"
+    echo "Launching $LLM_MODEL with $VLLM_CMD (vLLM >= 0.19.0 required)"
+    "$VLLM_CMD" serve "$LLM_MODEL" \
+        --host 127.0.0.1 \
+        --port "$VLLM_PORT" \
+        --tensor-parallel-size "$VLLM_TP" \
+        --max-model-len "$VLLM_MAX_MODEL_LEN" \
+        --gpu-memory-utilization "$VLLM_GPU_MEMORY_UTILIZATION" \
+        --language-model-only \
+        --reasoning-parser qwen3 \
+        --enable-prefix-caching \
+        >"$SERVER_LOG" 2>&1 &
+    server_pid="$!"
+
+    ready=0
+    for _attempt in $(seq 1 120); do
+        if ! kill -0 "$server_pid" 2>/dev/null; then
+            echo "ERROR: vLLM exited during startup; see $SERVER_LOG" >&2
+            tail -n 80 "$SERVER_LOG" >&2 || true
+            exit 1
+        fi
+        if "$CLIENT_PYTHON" - "$API_BASE/models" <<'PY' >/dev/null 2>&1
+import sys
+import urllib.request
+with urllib.request.urlopen(sys.argv[1], timeout=5) as response:
+    raise SystemExit(0 if response.status == 200 else 1)
+PY
+        then
+            ready=1
+            break
+        fi
+        sleep 10
+    done
+    [[ "$ready" == "1" ]] || { echo "ERROR: vLLM startup timed out: $SERVER_LOG" >&2; exit 1; }
+fi
+
+echo "===== stage 1/3: Qwen3.6 training-text generation ====="
+echo "run_root:           $RUN_ROOT"
+echo "annotations:        $ANNOTATIONS"
+echo "corpus:             $CORPUS"
+echo "model:              $LLM_MODEL"
+echo "sentences_per_term: $SENTENCES_PER_TERM"
+echo "replay_ratio:       $REPLAY_RATIO"
+echo "control_ratio:      $CONTROL_RATIO"
+echo "concurrency:        $GEN_CONCURRENCY"
+echo "domain_hint:        ${DOMAIN_HINT:-<auto from each term>}"
+
+"$CLIENT_PYTHON" scripts/generate_training_sentences.py \
+    --annotations "$ANNOTATIONS" \
+    --out "$CORPUS" \
+    --summary-out "$RUN_ROOT/corpus.summary.json" \
+    --failures-out "$RUN_ROOT/generation_failures.jsonl" \
+    --base-url "$API_BASE" \
+    --api-key "${VLLM_API_KEY:-EMPTY}" \
+    --model "$LLM_MODEL" \
+    --sentences-per-term "$SENTENCES_PER_TERM" \
+    --replay-ratio "$REPLAY_RATIO" \
+    --control-ratio "$CONTROL_RATIO" \
+    --domain-hint "$DOMAIN_HINT" \
+    --prompt-max-terms "$PROMPT_MAX_TERMS" \
+    --prompt-max-chars "$PROMPT_MAX_CHARS" \
+    --concurrency "$GEN_CONCURRENCY" \
+    --max-retries "$GEN_RETRIES" \
+    --seed "$SEED"
+
+[[ -s "$CORPUS" ]] || { echo "ERROR: corpus was not created: $CORPUS" >&2; exit 1; }
+touch "$RUN_ROOT/text.done"
+echo "stage 1 complete: $CORPUS"
+
+chain_next "$REPO/scripts/run_synthesize_training_audio.pbs" "stage 2 (term_tts)"

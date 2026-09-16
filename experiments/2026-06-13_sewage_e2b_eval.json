@@ -1,0 +1,751 @@
+{
+  "model": "google/gemma-4-E2B-it",
+  "timestamp": "2026-06-13T11:50:20.674496+00:00",
+  "sentences_file": "out/sentences_sewage_e2b.jsonl",
+  "n_total": 45,
+  "n_with_gold": 45,
+  "n_tts_changed": 45,
+  "n_term_replaced": 45,
+  "n_reading_correct": 11,
+  "acc_term_replaced": 1.0,
+  "acc_reading_correct": 0.2444,
+  "per_term": [
+    {
+      "term": "活性汚泥法",
+      "gold_reading": "かっせいおでいほう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この工場では活性汚泥法を使って水を浄化しています。",
+          "tts_text": "このこうじょうではかっせいおどろほうをつかってみずをじょうかしています。"
+        },
+        {
+          "sentence": "新しい技術で活性汚泥法を導入すると効率が上がります。",
+          "tts_text": "あたらしいぎじゅつでかっせいおどろほうをどうにゅうするとこうりつがあがります。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "嫌気性消化",
+      "gold_reading": "けんきせいしょうか",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "このプロセスでは嫌気性消化が重要になります。",
+          "tts_text": "このプロセスではきんきせいしょうかがじゅうようになります。"
+        },
+        {
+          "sentence": "食品の分解には嫌気性消化が使われています。",
+          "tts_text": "しょくひんのぶんかいにはきんきせいしょうかがつかわられています。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "最終沈殿池",
+      "gold_reading": "さいしゅうちんでんち",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "この処理では、最終沈殿池の確認が非常に重要です。",
+          "tts_text": "このしょりでは、さいしゅうちんでんちのかくにんがひじょうにじゅうようです。"
+        },
+        {
+          "sentence": "実験結果を出す前に、最終沈殿池の状態をチェックしましょう。",
+          "tts_text": "じっけんけっかをだすまえに、さいしゅうちんでんちのじょうたいをチェックしましょう。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "生物化学的酸素要求量",
+      "gold_reading": "せいぶつかがくてきさんそようきゅうりょう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この細胞の生物化学的酸素要求量は非常に高いです。",
+          "tts_text": "このさいぼうのせいぶかへきさんそようきゅうりょうはひじょうにたかいです。"
+        },
+        {
+          "sentence": "測定の結果、生物化学的酸素要求量が算出されました。",
+          "tts_text": "そくていのけっか、せいぶかへきさんそようきゅうりょうがさんしゅつされました。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "化学的酸素要求量",
+      "gold_reading": "かがくてきさんそようきゅうりょう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この物質の化学的酸素要求量は非常に高いです。",
+          "tts_text": "このぶっしつのかがくてきさんそようきりょうはひじょうにたかいです。"
+        },
+        {
+          "sentence": "実験では化学的酸素要求量を測定しました。",
+          "tts_text": "じっけんではかがくてきさんそようきりょうをそくていしました。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "懸濁物質",
+      "gold_reading": "けんだくぶっしつ",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 2,
+      "examples": [
+        {
+          "sentence": "水の中には細かい懸濁物質が浮いていますね。",
+          "tts_text": "みずのなかにはこわくぶっしつがういていますね。"
+        },
+        {
+          "sentence": "このサンプルから懸濁物質の量を測定しました。",
+          "tts_text": "このサンプルからけんだくぶっしつのりょうをそくていしました。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.6666666666666666
+    },
+    {
+      "term": "嫌気好気法",
+      "gold_reading": "けんきこうきほう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "この実験では嫌気好気法で微生物を培養しました。",
+          "tts_text": "このじっけんではけんきこうきほうでびせいぶつをばいようしました。"
+        },
+        {
+          "sentence": "酸素の有無で嫌気好気法と好気法を比較するのです。",
+          "tts_text": "さんそのうむでけんきこうきほうとこうきほうをひかくするのです。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "脱窒素",
+      "gold_reading": "だっちっそ",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "このプロセスでは脱窒素が重要になります。",
+          "tts_text": "このプロセスではだつちつそがじゅうようになります。"
+        },
+        {
+          "sentence": "しっかり脱窒素を完了させましょう。",
+          "tts_text": "しっかりだつちつそをかんりょうさせましょう。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "汚泥脱水",
+      "gold_reading": "おでいだっすい",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この施設の汚泥脱水プロセスは非常に重要です。",
+          "tts_text": "このしおでつすいのプロセスはひじょうにじゅうようです。"
+        },
+        {
+          "sentence": "新しい機械で汚泥脱水を効率化できました。",
+          "tts_text": "あたらしいきかいでしおでつすいをこうりつかできました。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "流量調整槽",
+      "gold_reading": "りゅうりょうちょうせいそう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "新しい流量調整槽を導入して効率を上げました。",
+          "tts_text": "るうりょうちょうせいそうをどうにゅうしてこうりつをあげました。"
+        },
+        {
+          "sentence": "この流量調整槽のメンテナンスは定期的に行う必要があります。",
+          "tts_text": "このるうりょうちょうせいそうのメンテナンスはていき的におこなうひつようがあります。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "散気装置",
+      "gold_reading": "さんきそうち",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 3,
+      "examples": [
+        {
+          "sentence": "この機械には大きな散気装置が付いているよ。",
+          "tts_text": "このきかいにはおおきなさんきそうちがついているよ。"
+        },
+        {
+          "sentence": "夏場の暑さを和らげるために散気装置を使います。",
+          "tts_text": "なつばのあつさをやわらげるためにさんきそうちをつかいます。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 1.0
+    },
+    {
+      "term": "膜分離活性汚泥法",
+      "gold_reading": "まくぶんりかっせいおでいほう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この処理は膜分離活性汚泥法を使って効率よく水を浄化します。",
+          "tts_text": "このしょりはまくぶんりかっせいおどろほうをつかってこうりつよくみずをじょうかします。"
+        },
+        {
+          "sentence": "新しい技術として膜分離活性汚泥法が注目されています。",
+          "tts_text": "あたらしいぎじゅつとしてまくぶんりかっせいおどろほうがちゅうもくされています。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "汚泥消化槽",
+      "gold_reading": "おでいしょうかそう",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "新しい汚泥消化槽を導入した方が効率的だね。",
+          "tts_text": "あたらしいおでいしょうそうをどうにゅうしたほうがこうりつだね。"
+        },
+        {
+          "sentence": "この汚泥消化槽の処理能力は十分か確認して。",
+          "tts_text": "このおでいしょうそうのしょりのうりょくはじゅうぶんかかくにんして。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "硝化脱窒",
+      "gold_reading": "しょうかだっちっそ",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この処理では硝化脱窒の工程が非常に重要になります。",
+          "tts_text": "このしょりではしょうかだつじつのこうていがひじょうにじゅうようになります。"
+        },
+        {
+          "sentence": "環境負荷を減らすために硝化脱窒を導入しましょう。",
+          "tts_text": "かんきょうふかをもらすためにしょうかだつじつをどうにゅうしましょう。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    },
+    {
+      "term": "返送汚泥",
+      "gold_reading": "へんそうおでい",
+      "n": 3,
+      "n_replaced": 3,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "この処理では返送汚泥の量を正確に把握する必要があります。",
+          "tts_text": "このしょりではへんそうおどりのりょうをせいかくにはあくひょうするひつようがあります。"
+        },
+        {
+          "sentence": "新しい設備で返送汚泥の排出方法を見直しましょう。",
+          "tts_text": "あたらしいせつびでへんそうおどりのはいしゅつほうほうをみなおしましょう。"
+        }
+      ],
+      "acc_replaced": 1.0,
+      "acc_correct": 0.0
+    }
+  ],
+  "all_results": [
+    {
+      "id": "0001",
+      "term": "活性汚泥法",
+      "sentence": "この工場では活性汚泥法を使って水を浄化しています。",
+      "tts_text": "このこうじょうではかっせいおどろほうをつかってみずをじょうかしています。",
+      "gold_reading": "かっせいおでいほう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0002",
+      "term": "活性汚泥法",
+      "sentence": "新しい技術で活性汚泥法を導入すると効率が上がります。",
+      "tts_text": "あたらしいぎじゅつでかっせいおどろほうをどうにゅうするとこうりつがあがります。",
+      "gold_reading": "かっせいおでいほう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0003",
+      "term": "活性汚泥法",
+      "sentence": "活性汚泥法は環境に優しい処理方法だと聞きました。",
+      "tts_text": "かっせいおどろほうはかんきょうにやさしいしょりほうだとききました。",
+      "gold_reading": "かっせいおでいほう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0004",
+      "term": "嫌気性消化",
+      "sentence": "このプロセスでは嫌気性消化が重要になります。",
+      "tts_text": "このプロセスではきんきせいしょうかがじゅうようになります。",
+      "gold_reading": "けんきせいしょうか",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0005",
+      "term": "嫌気性消化",
+      "sentence": "食品の分解には嫌気性消化が使われています。",
+      "tts_text": "しょくひんのぶんかいにはきんきせいしょうかがつかわられています。",
+      "gold_reading": "けんきせいしょうか",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0006",
+      "term": "嫌気性消化",
+      "sentence": "嫌気性消化の条件を詳しく説明してください。",
+      "tts_text": "きんきせいしょうかのじょうけんをくわしくせつめいしてください。",
+      "gold_reading": "けんきせいしょうか",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0007",
+      "term": "最終沈殿池",
+      "sentence": "この処理では、最終沈殿池の確認が非常に重要です。",
+      "tts_text": "このしょりでは、さいしゅうちんでんちのかくにんがひじょうにじゅうようです。",
+      "gold_reading": "さいしゅうちんでんち",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0008",
+      "term": "最終沈殿池",
+      "sentence": "実験結果を出す前に、最終沈殿池の状態をチェックしましょう。",
+      "tts_text": "じっけんけっかをだすまえに、さいしゅうちんでんちのじょうたいをチェックしましょう。",
+      "gold_reading": "さいしゅうちんでんち",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0009",
+      "term": "最終沈殿池",
+      "sentence": "汚染物質は最終沈殿池に集まる傾向がありますね。",
+      "tts_text": "おせんぶっしつはさいしゅうちんでんちにあつまるけいこうがありますね。",
+      "gold_reading": "さいしゅうちんでんち",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0010",
+      "term": "生物化学的酸素要求量",
+      "sentence": "この細胞の生物化学的酸素要求量は非常に高いです。",
+      "tts_text": "このさいぼうのせいぶかへきさんそようきゅうりょうはひじょうにたかいです。",
+      "gold_reading": "せいぶつかがくてきさんそようきゅうりょう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0011",
+      "term": "生物化学的酸素要求量",
+      "sentence": "測定の結果、生物化学的酸素要求量が算出されました。",
+      "tts_text": "そくていのけっか、せいぶかへきさんそようきゅうりょうがさんしゅつされました。",
+      "gold_reading": "せいぶつかがくてきさんそようきゅうりょう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0012",
+      "term": "生物化学的酸素要求量",
+      "sentence": "健康状態を把握するために生物化学的酸素要求量をチェックします。",
+      "tts_text": "けんこうじょうたいをはあくするためにせいぶかへきさんそようきゅうりょうをチェックします。",
+      "gold_reading": "せいぶつかがくてきさんそようきゅうりょう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0013",
+      "term": "化学的酸素要求量",
+      "sentence": "この物質の化学的酸素要求量は非常に高いです。",
+      "tts_text": "このぶっしつのかがくてきさんそようきりょうはひじょうにたかいです。",
+      "gold_reading": "かがくてきさんそようきゅうりょう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0014",
+      "term": "化学的酸素要求量",
+      "sentence": "実験では化学的酸素要求量を測定しました。",
+      "tts_text": "じっけんではかがくてきさんそようきりょうをそくていしました。",
+      "gold_reading": "かがくてきさんそようきゅうりょう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0015",
+      "term": "化学的酸素要求量",
+      "sentence": "化学的酸素要求量について詳しく説明してください。",
+      "tts_text": "かがくてきさんそようきりょうについてくわしくせつめいしてください。",
+      "gold_reading": "かがくてきさんそようきゅうりょう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0016",
+      "term": "懸濁物質",
+      "sentence": "水の中には細かい懸濁物質が浮いていますね。",
+      "tts_text": "みずのなかにはこわくぶっしつがういていますね。",
+      "gold_reading": "けんだくぶっしつ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0017",
+      "term": "懸濁物質",
+      "sentence": "このサンプルから懸濁物質の量を測定しました。",
+      "tts_text": "このサンプルからけんだくぶっしつのりょうをそくていしました。",
+      "gold_reading": "けんだくぶっしつ",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0018",
+      "term": "懸濁物質",
+      "sentence": "きれいな水でも懸濁物質は残ることがあります。",
+      "tts_text": "きれいなみずでもけんだくぶっしつはのこることがあります。",
+      "gold_reading": "けんだくぶっしつ",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0019",
+      "term": "嫌気好気法",
+      "sentence": "この実験では嫌気好気法で微生物を培養しました。",
+      "tts_text": "このじっけんではけんきこうきほうでびせいぶつをばいようしました。",
+      "gold_reading": "けんきこうきほう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0020",
+      "term": "嫌気好気法",
+      "sentence": "酸素の有無で嫌気好気法と好気法を比較するのです。",
+      "tts_text": "さんそのうむでけんきこうきほうとこうきほうをひかくするのです。",
+      "gold_reading": "けんきこうきほう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0021",
+      "term": "嫌気好気法",
+      "sentence": "嫌気好気法が適切かどうかを判断する必要があります。",
+      "tts_text": "けんきこうきほうがてきせつかどうかをはんだんするひつようがあります。",
+      "gold_reading": "けんきこうきほう",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0022",
+      "term": "脱窒素",
+      "sentence": "このプロセスでは脱窒素が重要になります。",
+      "tts_text": "このプロセスではだつちつそがじゅうようになります。",
+      "gold_reading": "だっちっそ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0023",
+      "term": "脱窒素",
+      "sentence": "しっかり脱窒素を完了させましょう。",
+      "tts_text": "しっかりだつちつそをかんりょうさせましょう。",
+      "gold_reading": "だっちっそ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0024",
+      "term": "脱窒素",
+      "sentence": "脱窒素の段階で何か問題が起きました。",
+      "tts_text": "だつちつそのだんかいでなにかもんだいがききました。",
+      "gold_reading": "だっちっそ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0025",
+      "term": "汚泥脱水",
+      "sentence": "この施設の汚泥脱水プロセスは非常に重要です。",
+      "tts_text": "このしおでつすいのプロセスはひじょうにじゅうようです。",
+      "gold_reading": "おでいだっすい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0026",
+      "term": "汚泥脱水",
+      "sentence": "新しい機械で汚泥脱水を効率化できました。",
+      "tts_text": "あたらしいきかいでしおでつすいをこうりつかできました。",
+      "gold_reading": "おでいだっすい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0027",
+      "term": "汚泥脱水",
+      "sentence": "汚泥脱水後の残渣の処理について相談したいです。",
+      "tts_text": "しおでつすいごのざんさのしょりについてそうだんしたいです。",
+      "gold_reading": "おでいだっすい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0028",
+      "term": "流量調整槽",
+      "sentence": "新しい流量調整槽を導入して効率を上げました。",
+      "tts_text": "るうりょうちょうせいそうをどうにゅうしてこうりつをあげました。",
+      "gold_reading": "りゅうりょうちょうせいそう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0029",
+      "term": "流量調整槽",
+      "sentence": "この流量調整槽のメンテナンスは定期的に行う必要があります。",
+      "tts_text": "このるうりょうちょうせいそうのメンテナンスはていき的におこなうひつようがあります。",
+      "gold_reading": "りゅうりょうちょうせいそう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0030",
+      "term": "流量調整槽",
+      "sentence": "流量調整槽の容量が足りないので、増設を検討しましょう。",
+      "tts_text": "るうりょうちょうせいそうのようりょうがたりないのでぞうせつをけんとうしましょう。",
+      "gold_reading": "りゅうりょうちょうせいそう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0031",
+      "term": "散気装置",
+      "sentence": "この機械には大きな散気装置が付いているよ。",
+      "tts_text": "このきかいにはおおきなさんきそうちがついているよ。",
+      "gold_reading": "さんきそうち",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0032",
+      "term": "散気装置",
+      "sentence": "夏場の暑さを和らげるために散気装置を使います。",
+      "tts_text": "なつばのあつさをやわらげるためにさんきそうちをつかいます。",
+      "gold_reading": "さんきそうち",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0033",
+      "term": "散気装置",
+      "sentence": "新しいモデルは、より効率的な散気装置を搭載しました。",
+      "tts_text": "あたらしいモデルは、よりこうりつてきなさんきそうちをとうさいしました。",
+      "gold_reading": "さんきそうち",
+      "term_replaced": true,
+      "reading_correct": true,
+      "tts_changed": true
+    },
+    {
+      "id": "0034",
+      "term": "膜分離活性汚泥法",
+      "sentence": "この処理は膜分離活性汚泥法を使って効率よく水を浄化します。",
+      "tts_text": "このしょりはまくぶんりかっせいおどろほうをつかってこうりつよくみずをじょうかします。",
+      "gold_reading": "まくぶんりかっせいおでいほう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0035",
+      "term": "膜分離活性汚泥法",
+      "sentence": "新しい技術として膜分離活性汚泥法が注目されています。",
+      "tts_text": "あたらしいぎじゅつとしてまくぶんりかっせいおどろほうがちゅうもくされています。",
+      "gold_reading": "まくぶんりかっせいおでいほう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0036",
+      "term": "膜分離活性汚泥法",
+      "sentence": "膜分離活性汚泥法を導入したら、排水量が大幅に減りました。",
+      "tts_text": "まくぶんりかっせいおどろほうをどうにゅうしたらはいすいりょうがおおはばにへりました。",
+      "gold_reading": "まくぶんりかっせいおでいほう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0037",
+      "term": "汚泥消化槽",
+      "sentence": "新しい汚泥消化槽を導入した方が効率的だね。",
+      "tts_text": "あたらしいおでいしょうそうをどうにゅうしたほうがこうりつだね。",
+      "gold_reading": "おでいしょうかそう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0038",
+      "term": "汚泥消化槽",
+      "sentence": "この汚泥消化槽の処理能力は十分か確認して。",
+      "tts_text": "このおでいしょうそうのしょりのうりょくはじゅうぶんかかくにんして。",
+      "gold_reading": "おでいしょうかそう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0039",
+      "term": "汚泥消化槽",
+      "sentence": "汚泥消化槽のメンテナンスを定期的に行う必要があります。",
+      "tts_text": "おでいしょうそうのメンテナンスをていきてきに おこなうひつようがあります。",
+      "gold_reading": "おでいしょうかそう",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0040",
+      "term": "硝化脱窒",
+      "sentence": "この処理では硝化脱窒の工程が非常に重要になります。",
+      "tts_text": "このしょりではしょうかだつじつのこうていがひじょうにじゅうようになります。",
+      "gold_reading": "しょうかだっちっそ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0041",
+      "term": "硝化脱窒",
+      "sentence": "環境負荷を減らすために硝化脱窒を導入しましょう。",
+      "tts_text": "かんきょうふかをもらすためにしょうかだつじつをどうにゅうしましょう。",
+      "gold_reading": "しょうかだっちっそ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0042",
+      "term": "硝化脱窒",
+      "sentence": "硝化脱窒の効率を上げる方法について相談させてください。",
+      "tts_text": "しょうかだつじつのこうりつをあげるほうほうについてそうだんさせてください。",
+      "gold_reading": "しょうかだっちっそ",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0043",
+      "term": "返送汚泥",
+      "sentence": "この処理では返送汚泥の量を正確に把握する必要があります。",
+      "tts_text": "このしょりではへんそうおどりのりょうをせいかくにはあくひょうするひつようがあります。",
+      "gold_reading": "へんそうおでい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0044",
+      "term": "返送汚泥",
+      "sentence": "新しい設備で返送汚泥の排出方法を見直しましょう。",
+      "tts_text": "あたらしいせつびでへんそうおどりのはいしゅつほうほうをみなおしましょう。",
+      "gold_reading": "へんそうおでい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    },
+    {
+      "id": "0045",
+      "term": "返送汚泥",
+      "sentence": "返送汚泥の処理スケジュールについて相談させてください。",
+      "tts_text": "へんそうおどりのしょりスケジュールについてそうだんさせてください。",
+      "gold_reading": "へんそうおでい",
+      "term_replaced": true,
+      "reading_correct": false,
+      "tts_changed": true
+    }
+  ]
+}

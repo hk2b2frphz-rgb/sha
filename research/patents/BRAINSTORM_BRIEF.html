@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>専門用語の認識誤りに対する選択的文脈補正方式</title>
+<style>
+:root{--ink:#111;--muted:#555;--line:#aaa;--light:#f4f4f4;--problem:#fff8e8}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);background:#fff;font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif;font-size:15px;line-height:1.8}main{max-width:980px;margin:0 auto;padding:48px 52px 72px}h1{margin:0 0 10px;font-size:30px;line-height:1.45;font-weight:600}h2{margin:42px 0 14px;padding-bottom:5px;border-bottom:1px solid var(--ink);font-size:20px}h3{margin:24px 0 8px;font-size:16px}p{margin:0 0 12px}.meta{color:var(--muted);font-size:12px}.abstract{margin:30px 0;padding:18px 22px;border:1px solid var(--line)}.abstract strong{display:block;margin-bottom:6px}.term{font-weight:600}.example{margin:16px 0;padding:12px 18px;background:var(--light)}.problem{margin:18px 0;padding:14px 18px;background:var(--problem);border-left:3px solid #8a6314}.figure{margin:24px 0 30px}.figure-title{margin-bottom:12px;text-align:center;font-weight:600}.flow{display:flex;align-items:stretch;justify-content:center;gap:28px}.node{position:relative;display:flex;align-items:center;justify-content:center;min-height:74px;padding:12px 14px;border:1px solid var(--ink);text-align:center;line-height:1.5;flex:1}.node:not(:last-child)::after{content:"→";position:absolute;right:-23px;top:50%;transform:translateY(-50%);font-family:sans-serif;font-size:18px}.node.data{border-radius:24px}.node.process{background:var(--light)}.branch{margin:0 auto;max-width:720px}.branch-head{width:280px;margin:0 auto;padding:13px;border:1px solid var(--ink);text-align:center;background:var(--light)}.branch-line{height:24px;margin:auto;border-left:1px solid var(--ink)}.branch-options{display:grid;grid-template-columns:1fr 1fr;gap:70px;position:relative}.branch-options::before{content:"";position:absolute;top:0;left:25%;right:25%;border-top:1px solid var(--ink)}.branch-option{position:relative;padding-top:22px}.branch-option::before{content:"";position:absolute;top:0;left:50%;height:22px;border-left:1px solid var(--ink)}.branch-label{text-align:center;font-size:12px}.branch-box{min-height:108px;padding:14px;border:1px solid var(--ink)}.branch-box strong{display:block;margin-bottom:5px}.caption{margin-top:9px;color:var(--muted);font-size:12px;text-align:center}.definition{display:grid;grid-template-columns:180px 1fr;border-top:1px solid var(--line)}.definition dt,.definition dd{margin:0;padding:9px 10px;border-bottom:1px solid var(--line)}.definition dt{font-weight:600;background:var(--light)}table{width:100%;border-collapse:collapse;font-family:"Noto Sans JP","Yu Gothic",sans-serif;font-size:12px;line-height:1.55}th,td{padding:9px 8px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--light);font-weight:600}ol,ul{margin:8px 0 14px;padding-left:24px}li{margin:5px 0}.claim{padding:16px 20px;border:1px solid var(--ink)}.claim ol{margin-bottom:0}.note{color:var(--muted);font-size:12px}.links{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:12px}a{color:#124b91}@media(max-width:720px){main{padding:28px 18px 50px}.flow{flex-direction:column;gap:24px}.node:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-25px;transform:translateX(-50%)}.branch-options{gap:14px}.definition{grid-template-columns:120px 1fr}h1{font-size:24px}}@media print{main{max-width:none;padding:18mm}a{color:inherit;text-decoration:none}.figure{break-inside:avoid}h2{break-after:avoid}}
+.diagram-wrap{width:100%;overflow-x:auto}.diagram{display:block;width:100%;height:auto;min-width:720px}.diagram .box{fill:#fff;stroke:#111;stroke-width:1.4}.diagram .process{fill:#f4f4f4}.diagram .decision{fill:#fff;stroke:#111;stroke-width:1.4}.diagram .connector{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow)}.diagram text{fill:#111;font-family:"Noto Sans JP","Yu Gothic",sans-serif;font-size:14px;text-anchor:middle}.diagram .label{font-size:12px}.diagram .strong{font-weight:600}@media(max-width:720px){.diagram{min-width:680px}}
+</style>
+</head>
+<body><main>
+<header>
+  <h1>専門用語の認識誤りに対する<br>選択的文脈補正方式</h1>
+  <p class="meta">特許検討資料　｜　2026年9月16日　｜　日本公報を中心に海外公報を比較参照</p>
+</header>
+
+<div class="abstract">
+  <strong>要旨</strong>
+  専門語ごとに、正しい表記、発音、意味及び用例を登録するとともに、複数の条件で生じる認識誤りを収集する。認識誤りから置換先が一意に定まる場合は直接置換し、複数の登録語が対応する場合に限り、保存した意味・用例と発話文脈を用いる言語モデルによって置換先を決定する。
+</div>
+
+<section>
+  <h2>1．背景技術</h2>
+  <p>音声認識モデルを専門分野へ対応させる方法は、モデルを更新する方法と、モデルを更新せず認識結果を修正する方法に大別できる。さらに後者には、辞書による機械的な置換と、LLMによる文脈補正がある。</p>
+  <table><thead><tr><th>方式</th><th>利点</th><th>課題</th></tr></thead><tbody>
+    <tr><td>音声認識モデルのFT</td><td>専門語の音響・言語的特徴をモデル自体へ反映できる。推論時に別処理を追加しなくても認識できる可能性がある。</td><td>学習データ、計算資源及び評価が必要で、改善を直ちに反映しにくい。更新によって既存語の精度が低下する可能性もある。</td></tr>
+    <tr><td>辞書・対応表による置換</td><td>再学習を行わず、登録後すぐに反映できる。文字列照合と置換だけなら処理が軽い。</td><td>登録されていない誤りには対応できない。同じ認識誤りに複数の正解語が対応すると、置換先を一意に決められない。</td></tr>
+    <tr><td>LLMによる後段修正</td><td>前後の文章や会話履歴を参照し、同音異義語や曖昧な候補を文脈から選択できる。</td><td>モデル呼出しによる処理時間、計算量及び運用費用が加わる。全発話へ常時適用すると通常時の応答も遅くなる。</td></tr>
+  </tbody></table>
+  <p>本方式は、即時反映できる辞書置換を基本とし、辞書だけでは置換先を決定できない箇所に限ってLLMを使用する。登録時に得た音声及び正解表記は、将来のFTにも利用できるよう保持する。</p>
+  <p>音声認識結果に含まれる専門語の誤りを補正する方法として、実際の認識誤りと正しい語彙との対応を辞書に登録し、同じ認識結果が現れた場合に置換する方式がある。</p>
+  <div class="example"><span class="term">正しい専門語：</span>最終沈殿池<br><span class="term">認識結果：</span>最終沈殿地<br><span class="term">処理：</span>「最終沈殿地」を検出した場合、「最終沈殿池」へ置換する。</div>
+  <figure class="figure">
+    <div class="figure-title">図1　従来の誤認識置換方式</div>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 190" role="img" aria-labelledby="prior-title prior-desc">
+        <title id="prior-title">従来の誤認識置換方式のフローチャート</title>
+        <desc id="prior-desc">専門語の発話から認識誤りを取得し、正しい専門語との対応を保存し、後続の認識結果で同じ誤りを検出した場合に直接置換する。</desc>
+        <defs><marker id="arrow-prior" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <style>.prior-line{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow-prior)}</style>
+        <rect class="box" x="15" y="60" width="155" height="70" rx="2"/><text x="92.5" y="91"><tspan class="strong">専門語を発話</tspan><tspan x="92.5" dy="22">「最終沈殿池」</tspan></text>
+        <path class="prior-line" d="M170 95 H200"/>
+        <rect class="box process" x="200" y="60" width="155" height="70" rx="2"/><text x="277.5" y="91"><tspan class="strong">ASRで誤認識</tspan><tspan x="277.5" dy="22">「最終沈殿地」</tspan></text>
+        <path class="prior-line" d="M355 95 H385"/>
+        <rect class="box" x="385" y="60" width="160" height="70" rx="2"/><text x="465" y="91"><tspan class="strong">対応を保存</tspan><tspan x="465" dy="22">誤り → 正しい語</tspan></text>
+        <path class="prior-line" d="M545 95 H575"/>
+        <rect class="box process" x="575" y="60" width="150" height="70" rx="2"/><text x="650" y="91"><tspan class="strong">同じ誤りを</tspan><tspan x="650" dy="22">検出</tspan></text>
+        <path class="prior-line" d="M725 95 H755"/>
+        <rect class="box" x="755" y="60" width="130" height="70" rx="2"/><text x="820" y="91"><tspan class="strong">直接置換</tspan><tspan x="820" dy="22">正しい語へ</tspan></text>
+      </svg>
+    </div>
+  </figure>
+  <p>一方、同じ専門語であっても、使用するASR、話者、発話速度、前後の文章又はデコード条件によって認識誤りが変化する。そのため、複数のASRによる認識、複数回の発話、又は専門語を含む複数の文章をTTSで生成して再認識することにより、一つの専門語に対して複数の認識誤りを収集する方式が考えられる。</p>
+</section>
+
+<section>
+  <h2>2．従来方式を拡張した場合の課題</h2>
+  <p>専門語ごとに複数の認識誤りを登録すれば、認識誤りの揺れを広く吸収できる。しかし、登録語と認識誤りの数が増えるほど、同じ認識結果が異なる登録語の誤り候補として重複する可能性が高くなる。同音異義語の場合にも同様の重複が生じる。</p>
+  <div class="problem"><strong>課題：</strong>一つの認識結果が複数の登録語に対応すると、固定置換では置換先を決定できない。一方、全ての認識結果を常時LLMで補正すると、通常の推論にも処理時間及び計算量が加わる。</div>
+</section>
+
+<section>
+  <h2>3．提案方式</h2>
+  <h3>3.1　辞書登録処理</h3>
+  <p>一語の専門語について、正しい表記を登録し、その語を利用者が発話し、さらに意味及び用例を説明する。これらを一つの専門語レコードとして保存する。</p>
+  <figure class="figure">
+    <div class="figure-title">図2　一語分の辞書登録処理</div>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 190" role="img" aria-labelledby="reg-title reg-desc">
+        <title id="reg-title">一語分の辞書登録処理のフローチャート</title>
+        <desc id="reg-desc">専門語の正しい表記を登録し、その専門語を発話し、意味と用例を説明して一語分の登録を完了する。</desc>
+        <defs><marker id="arrow-reg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <style>.reg-line{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow-reg)}</style>
+        <rect class="box" x="25" y="60" width="175" height="70" rx="2"/><text x="112.5" y="91"><tspan class="strong">専門語の表記を</tspan><tspan x="112.5" dy="22">登録</tspan></text>
+        <path class="reg-line" d="M200 95 H245"/>
+        <rect class="box" x="245" y="60" width="175" height="70" rx="2"/><text x="332.5" y="91"><tspan class="strong">専門語を</tspan><tspan x="332.5" dy="22">発話</tspan></text>
+        <path class="reg-line" d="M420 95 H465"/>
+        <rect class="box" x="465" y="60" width="185" height="70" rx="2"/><text x="557.5" y="91"><tspan class="strong">意味・用例を</tspan><tspan x="557.5" dy="22">説明</tspan></text>
+        <path class="reg-line" d="M650 95 H695"/>
+        <rect class="box process" x="695" y="60" width="180" height="70" rx="2"/><text x="785" y="91"><tspan class="strong">一語分の</tspan><tspan x="785" dy="22">辞書登録完了</tspan></text>
+      </svg>
+    </div>
+    <figcaption class="caption">表記、登録音声、意味及び用例を一語の単位で保存する。</figcaption>
+  </figure>
+
+  <h3>3.2　認識誤り候補の生成</h3>
+  <p>辞書登録とは別に、登録音声、複数のASR、前後文を変更した発話又はTTS再認識を用いて、当該専門語に対する複数の認識誤り候補を取得し、一語分の専門語レコードへ対応付ける。</p>
+  <figure class="figure">
+    <div class="figure-title">図3　認識誤り候補の生成処理</div>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 190" role="img" aria-labelledby="error-title error-desc">
+        <title id="error-title">認識誤り候補の生成処理のフローチャート</title>
+        <desc id="error-desc">登録済み専門語を複数の条件で認識させ、複数の認識誤りを収集して専門語レコードへ対応付ける。</desc>
+        <defs><marker id="arrow-error" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <style>.error-line{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow-error)}</style>
+        <rect class="box" x="20" y="55" width="180" height="80" rx="2"/><text x="110" y="85"><tspan class="strong">登録済み専門語</tspan><tspan x="110" dy="23">表記・音声・用例</tspan></text>
+        <path class="error-line" d="M200 95 H245"/>
+        <rect class="box process" x="245" y="55" width="180" height="80" rx="2"/><text x="335" y="84"><tspan class="strong">認識を実行</tspan><tspan x="335" dy="22">複数ASR・前後文変更</tspan><tspan x="335" dy="20">TTS再認識等</tspan></text>
+        <path class="error-line" d="M425 95 H470"/>
+        <rect class="box" x="470" y="55" width="180" height="80" rx="2"/><text x="560" y="86"><tspan class="strong">複数の認識誤り</tspan><tspan x="560" dy="23">を取得</tspan></text>
+        <path class="error-line" d="M650 95 H695"/>
+        <rect class="box" x="695" y="55" width="185" height="80" rx="2"/><text x="787.5" y="84"><tspan class="strong">専門語レコードへ</tspan><tspan x="787.5" dy="22">認識誤り群を</tspan><tspan x="787.5" dy="20">対応付け</tspan></text>
+      </svg>
+    </div>
+  </figure>
+
+  <h3>3.3　認識時の補正処理</h3>
+  <p>認識結果が登録済みの誤り候補と一致した場合、その誤り候補に対応する登録語の数を判定する。対応する登録語が一つの場合は直接置換し、複数の場合に限って文脈補正を実行する。</p>
+  <figure class="figure">
+    <div class="figure-title">図4　認識時の補正処理</div>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 520" role="img" aria-labelledby="fig2-title fig2-desc">
+        <title id="fig2-title">認識時の補正処理のフローチャート</title>
+        <desc id="fig2-desc">音声認識後に登録済み誤りと照合し、対応する登録語が一意なら直接置換し、複数なら意味、用例、文脈を使うLLM補正へ分岐する。</desc>
+        <defs><marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <style>.flowline{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow2)}</style>
+        <rect class="box" x="355" y="15" width="190" height="55" rx="27.5"/>
+        <text x="450" y="48"><tspan class="strong">音声入力</tspan></text>
+        <path class="flowline" d="M450 70 V100"/>
+        <rect class="box process" x="330" y="100" width="240" height="60" rx="2"/>
+        <text x="450" y="136"><tspan class="strong">ASRによる認識</tspan></text>
+        <path class="flowline" d="M450 160 V190"/>
+        <rect class="box" x="315" y="190" width="270" height="65" rx="2"/>
+        <text x="450" y="216"><tspan class="strong">登録済みの認識誤りと照合</tspan><tspan x="450" dy="22">対応する登録語を取得</tspan></text>
+        <path class="flowline" d="M450 255 V285"/>
+        <polygon class="decision" points="450,285 590,350 450,415 310,350"/>
+        <text x="450" y="344"><tspan class="strong">対応する登録語は</tspan><tspan x="450" dy="22">一つか</tspan></text>
+        <path class="flowline" d="M310 350 H175 V445"/>
+        <text class="label" x="242" y="338">一意</text>
+        <rect class="box" x="45" y="445" width="260" height="65" rx="2"/>
+        <text x="175" y="472"><tspan class="strong">直接置換</tspan><tspan x="175" dy="22">LLMは起動しない</tspan></text>
+        <path class="flowline" d="M590 350 H725 V445"/>
+        <text class="label" x="658" y="338">複数候補</text>
+        <rect class="box process" x="595" y="445" width="260" height="65" rx="2"/>
+        <text x="725" y="465"><tspan class="strong">LLMによる文脈補正</tspan><tspan x="725" dy="20">前後文・会話履歴</tspan><tspan x="725" dy="19">候補ごとの意味・用例</tspan></text>
+      </svg>
+    </div>
+    <figcaption class="caption">誤り候補が重複した箇所のみLLMへ送るため、通常の認識処理には追加遅延を生じさせない。</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>4．保持する情報</h2>
+  <h3>4.1　利用者が一語ごとに登録する情報</h3>
+  <dl class="definition">
+    <dt>正しい表記</dt><dd>利用者が登録した専門語の文字列</dd>
+    <dt>登録音声・発音</dt><dd>利用者が専門語を発音した音声、読み又は音素情報</dd>
+    <dt>意味・用例</dt><dd>専門語の意味、使用対象、使用場面及び当該専門語を含む例文</dd>
+  </dl>
+  <h3>4.2　システムが内部で生成・保持する情報</h3>
+  <dl class="definition">
+    <dt>認識誤り群</dt><dd>複数ASR、前後文を変更した発話又はTTS再認識によってシステムが取得した文字列</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>5．技術的効果</h2>
+  <ol>
+    <li>一つの専門語に対する認識誤りの揺れを、複数の誤り候補によって吸収できる。</li>
+    <li>誤り候補が複数の登録語に重複した場合、固定置換による誤修正を抑制できる。</li>
+    <li>意味及び用例を登録時に保存するため、競合発生時に候補ごとの使用文脈を比較できる。</li>
+    <li>置換先が一意の場合はLLMを起動しないため、通常の推論速度を維持できる。</li>
+    <li>辞書の更新はモデル再学習を必要とせず、登録内容を直ちに後段補正へ反映できる。</li>
+    <li>登録音声と正しい表記を将来の音声認識モデルのファインチューニング用教師データとして利用できる。意味及び用例は、文脈を含む学習例の生成又は学習対象の選別にも利用できる。</li>
+  </ol>
+</section>
+
+<section>
+  <h2>6．発明の中心候補</h2>
+  <div class="claim">
+    <ol>
+      <li>専門語の表記、発音、意味及び用例を登録する。</li>
+      <li>複数の認識条件を用いて、当該専門語に対応する複数の認識誤りを取得する。</li>
+      <li>取得した認識誤りを当該専門語に対応付けて記憶する。</li>
+      <li>後続する音声の認識結果に含まれる認識誤りに対応する登録語の数を判定する。</li>
+      <li>登録語が一つの場合は直接置換し、複数の場合は、各登録語の意味・用例及び発話文脈を用いて置換先を決定する。</li>
+    </ol>
+  </div>
+  <p class="note">上記は検討用の骨格であり、請求項の確定文案ではない。特許性の中心は、誤り候補の生成自体ではなく、候補の重複を検出し、直接置換と文脈補正を選択的に切り替える連結に置く。</p>
+</section>
+
+<section>
+  <h2>7．特許性の暫定評価</h2>
+  <p>認識誤りと正しい語の対応付け、複数条件による誤り候補生成、複数候補の文脈選択、LLMによる後補正には、それぞれ近接する先行技術が存在する。したがって、個別要素だけでなく、次の因果関係を一体として示す必要がある。</p>
+  <p><strong>誤り揺れを吸収するため候補を増やす → 登録語の増加により誤り候補が重複する → 重複を検出する → 一意な候補は直接置換し、重複候補だけ文脈補正する。</strong></p>
+  <p>現時点では、この全工程を単一文献が開示するとまでは確認していない。ただし、新規性又は進歩性が認められることを確定したものではなく、組合せ容易性を含む追加調査が必要である。</p>
+</section>
+
+<section>
+  <h2>8．主要文献の請求項比較</h2>
+  <h3>8.1　本方式に特に近い請求項</h3>
+  <table><thead><tr><th>文献・確認範囲</th><th>請求項上の近接点</th><th>残る差分</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a><br>公開1・5・7～9</td><td>実発話による誤認識語収集、専門語との対応表及び自動置換</td><td>同一誤認識に複数の正解語が対応する場合の選択</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a><br>登録1～8、特に1・5</td><td>一つの類似語が複数の変換先と競合する場合の解消</td><td>候補を保持し、後続発話ごとに文脈選択する点</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20090254819A1/en">US20090254819A1</a><br>公開1・4・6～8・15・17・19～21</td><td>一対多の訂正辞書、候補別文脈スコア及び直接置換との分岐</td><td>ASRの実発話、登録音声及び利用者が登録した意味・用例</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a><br>公開1・4・7</td><td>訂正履歴、個人情報及びアプリ文脈による候補再順位付け</td><td>置換候補の重複検出をLLM起動条件とする点</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20250335933A1/en">US20250335933A1</a><br>公開請求項1、本文【0145】</td><td>不明語の定義を質問・保存し、矛盾する定義を文脈で区別</td><td>異なる正解表記が同一のASR誤認識へ収束する問題ではない。全20項は未精査</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2025135075A/en">JP2025135075A</a><br>公開1・5・6</td><td>利用者固有語彙とASR結果をLLMへ入力する後補正</td><td>一意な候補を直接置換し、重複時だけLLMを起動する分岐</td></tr>
+  </tbody></table>
+
+  <h3>8.2　従来の誤認識置換に関する請求項</h3>
+  <table><thead><tr><th>文献・確認請求項</th><th>請求項で確認した構成</th><th>今回案との関係</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a><br>公開1・5・7～9</td><td>専門語と誤認識語の対応表による自動置換、専門語の発話による誤認識語の取得、複数話者からの複数誤認識語の登録。</td><td>実発話から誤認識群を作る部分が直接近い。複数の正解語が同じ誤認識に重なる場合の選択は確認項にない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6718182B1/ja">JP6718182B1</a><br>登録1・3</td><td>入力語を音声データ化し、異なる解析語を誤変換語として関連付ける。後続音声が誤変換語と一致した時に正しい候補を抽出する。</td><td>誤認識と正しい語の対応生成及び将来利用が近い。複数置換先の選択や意味・用例の利用は確認項にない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2018045001A/ja">JP2018045001A</a><br>公開1～11</td><td>誤認識語と専門語の変換表による置換。請求項2～6は誤認識確率、信頼度、話題及び閾値による適用条件。</td><td>置換の条件制御が近い。同一誤認識に複数の正解語を保持する構成ではない。</td></tr>
+  </tbody></table>
+
+  <h3>8.3　誤り揺れの生成・収集に関する請求項</h3>
+  <table><thead><tr><th>文献・確認請求項</th><th>請求項で確認した構成</th><th>今回案との関係</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a><br>公開8・9</td><td>専門語の実発話から誤認識語を取得し、複数話者から一専門語に対する複数の誤認識語を登録する。</td><td>一語に対する複数誤認識の収集が直接近い。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5148671B2/ja">JP5148671B2</a><br>登録5</td><td>一回の入力に対する複数方式又は複数回の認識結果から、結果間の差分を誤認識部分として抽出する。</td><td>複数ASR又は複数回認識が近い。専門語ごとの誤認識群を置換辞書へ登録する請求項ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US6122613A/en">US6122613A</a><br>請求項1～4</td><td>同一音声を異なる複数の音声認識器で処理し、複数結果を統合する。</td><td>複数ASRの利用は既知。目的は結果統合であり、誤認識群の辞書化ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US7529668B2/en">US7529668B2</a><br>登録1・14～18・20・33～37</td><td>複数の発音観測を音素単位で整列・集約し、妥当性確認後に発音辞書へ追加する。</td><td>複数発話の収集が近い。対象は発音表現であり、ASR出力の文字列群ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8977547B2/en">US8977547B2</a><br>登録1～4</td><td>登録対象を複数回発話させ、発話間の音響類似度に基づいて登録、再発話又は失敗へ分岐する。</td><td>複数回発話と登録制御が近い。複数の誤認識文字列を集める処理ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6718182B1/ja">JP6718182B1</a><br>登録1</td><td>正しい入力語を音声データへ変換し、その解析で得た異なる語を誤変換語として対応付ける。</td><td>TTS等による誤認識生成が近い。前後文を変えた複数TTS音声から誤認識群を作ることは明示されない。</td></tr>
+  </tbody></table>
+  <p class="note">複数ASR、複数回発話、音声合成及び複数誤認識の収集には、それぞれ請求項上の近接例がある。一方、「意味・用例を含む複数の前後文を生成し、各文章をTTS・ASRへ順次入力して、一語の置換用誤認識群を作る」という連結は、上記確認請求項だけからは確認していない。</p>
+</section>
+
+<section>
+  <h2>9．残る検討事項</h2>
+  <ul>
+    <li>意味・用例の入力形式を自由記述とするか、対象・状態・操作等の項目に構造化するか。</li>
+    <li>認識誤りの一致を完全一致とするか、正規化又は音韻類似を含めるか。</li>
+    <li>LLMが置換を確定できない場合に、元の認識結果を維持するか、利用者へ確認するか。</li>
+    <li>複数ASR、TTS及び前後文の変更による誤り候補生成の具体的範囲。</li>
+    <li>候補重複率、補正精度、誤置換率、LLM呼出し率及び遅延による効果検証。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>10．調査済み特許の体系的一覧</h2>
+  <p>以下は調査範囲を技術分野別に把握するための索引である。特許性の比較に用いる主要文献については、第8節に確認した請求項番号と構成要件を示した。その他の文献は、番号や概要だけから本方式と重複すると判断せず、必要に応じて独立請求項及びその引用関係を追加確認する。</p>
+  <h3>10.1　専門語登録、辞書及び誤認識対応表</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP5366169B2/ja">JP5366169B2</a></td><td>訂正語に対応する音声区間の音素列を取得して語彙へ登録</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6718182B1/ja">JP6718182B1</a></td><td>入力語を音声化して得た誤解析語と正しい語を対応付け</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A／US20220270595A1</a></td><td>専門語の実発話からASR誤認識語との対応表を作成</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2018045001A/ja">JP2018045001A</a></td><td>話題ごとの誤認識置換表と適用閾値</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a></td><td>同一の類似語に複数変換先が対応する競合を優先度で解消</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP4816409B2/ja">JP4816409B2</a></td><td>音素分類及び頻度を用いた呼称登録</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2009204732A/ja">JP2009204732A</a></td><td>文書検索によって未知語の読み候補を検証</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6869835B2/ja">JP6869835B2</a></td><td>サーバ側表記と端末側の読みを照合して登録</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20150106100A1/en">US20150106100A1</a></td><td>新語と既存語の音響的混同度及び追加影響を評価</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US7529668B2/en">US7529668B2</a></td><td>複数の発音観測を整列・集約し、妥当性確認後に発音辞書へ追加（登録1・14～18・20・33～37）</td></tr>
+    <tr><td><a href="https://patents.justia.com/patent/5754977">US5754977A</a></td><td>新規登録語と既存語の混同を登録時に検出</td></tr>
+  </tbody></table>
+
+  <h3>10.2　訂正対話、訂正位置及び音素照合</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP4604178B2/ja">JP4604178B2</a></td><td>対話による訂正候補の選択、保存及び適応</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP3718088B2/ja">JP3718088B2</a></td><td>訂正用音声から候補を生成・選択し辞書を更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP4270770B2/ja">JP4270770B2</a></td><td>元発話と訂正再発話を音響的に対応付けて置換</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP4537755B2/ja">JP4537755B2</a></td><td>対話履歴から訂正発話を検出し直前発話を修正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2001306091A/ja">JP2001306091A</a></td><td>訂正再発話と元発話内の対象区間を対応付け</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/WO2003025904A1/en">WO2003025904A1</a></td><td>訂正語の音素列から認識結果内の訂正位置を特定</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20050203751A1/en">US20050203751A1</a></td><td>未知語訂正、音素アラインメント及び語彙追加</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US9514743B2/en">US9514743B2</a></td><td>訂正要求発話を検出して訂正候補を生成</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20210005204A1/en">US20210005204A1</a></td><td>誤認識・正解の音素列履歴を用いた候補検索</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20210043196A1/en">US20210043196A1</a></td><td>音素記号列を辞書内の語へ置換</td></tr>
+  </tbody></table>
+
+  <h3>10.3　訂正履歴、LLM及び個人化された後補正</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP7771015B2/ja">JP7771015B2</a></td><td>修正前後、話題及び時刻の履歴を用いる後段訂正モデル更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2025135075A/en">JP2025135075A</a></td><td>利用者固有語彙と認識結果をLLMへ与える後補正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2008243080A/ja">JP2008243080A</a></td><td>類似用例、音韻及び意味属性を用いる認識訂正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US10522133B2/en">US10522133B2</a></td><td>過去の誤認識・訂正履歴に基づく自動訂正又は警告</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US9858038B2/en">US9858038B2</a></td><td>個人又は集約利用者の置換データによる訂正候補</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20210142789A1/en">US20210142789A1</a></td><td>低信頼領域を文脈、音韻又は埋込みに基づいて置換</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a></td><td>訂正ログ、個人情報及びアプリ文脈による候補再順位付け</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20230402034A1/en">US20230402034A1</a></td><td>過去の利用者訂正を代替認識仮説へ反映</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US12444412B2/en">US12444412B2</a></td><td>LLM、検索及びユーザー入力を用いるASRエンティティ訂正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20260011325A1/en">US20260011325A1</a></td><td>ASR仮説と文脈リストによる後段スペル訂正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/WO2006113350A2/en">WO2006113350A2</a></td><td>ASR出力と最終編集文書の対による後段訂正モデル適応</td></tr>
+  </tbody></table>
+
+  <h3>10.4　意味質問、同音異義語及び自然言語説明</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/US20250335933A1/en">US20250335933A1</a></td><td>不明語の定義を質問・保存し、競合する定義を文脈で区別</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US10621285B2/en">US10621285B2／US20200034423A1</a></td><td>語義を質問して意味表現及び知識を更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7178995B2/ja">JP7178995B2</a></td><td>質問による知識更新と後続対話での利用</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JPH075891A/ja">JPH075891A／JP3397372B2</a></td><td>質問回答で認識語彙を変更し元音声を再評価</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2013250931A/ja">JP2013250931A</a></td><td>意味不明な認識語について他利用者へ質問し回答を取得</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2002287787A/ja">JP2002287787A</a></td><td>同音異義文字を説明語、語句及び文脈キューで選択</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5622566B2/ja">JP5622566B2</a></td><td>発声による文字指定、訂正及びレキシコン更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5819924B2/ja">JP5819924B2</a></td><td>日本語の単語内文字による訂正時の語彙構築</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JPWO2014041607A1/en">JPWO2014041607A1</a></td><td>同音・異表記候補を表示し利用者選択で置換</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP3710157B2/ja">JP3710157B2</a></td><td>読みと漢字構成要素を併用して語句を入力</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20260065907A1/en">US20260065907A1</a></td><td>発音、構造、文脈及び意味の自然言語説明を用いるLLM訂正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/CN115019787B/en">CN115019787B</a></td><td>拮抗する同音候補を説明語彙及び言語モデルで選択</td></tr>
+  </tbody></table>
+
+  <h3>10.5　音響検索、候補選択及び利用者文脈</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/US12444402B2/en">US12444402B2</a></td><td>音声埋込みで固有名詞候補を検索し、選択結果を登録</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US9558740B1/en">US9558740B1</a></td><td>曖昧性解消の要否を判定してから候補を選ぶ二段処理</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8600760B2/en">US8600760B2</a></td><td>n-best第一候補が混同しやすい場合に第二候補を採用</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5148671B2/ja">JP5148671B2</a></td><td>複数方式又は複数回の認識結果の差分から誤認識部分を抽出（登録5）</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US6122613A/en">US6122613A</a></td><td>同一音声を複数の認識器で処理し結果を統合（請求項1～4）</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US12633290B2/en">US12633290B2</a></td><td>音素候補と分野・利用者意図による認識文の順位付け</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7322782B2/ja">JP7322782B2</a></td><td>音声住所の同音誤変換を地域情報で補正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6233867B2/ja">JP6233867B2</a></td><td>付加情報に一致する語の認識確率を優先</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8204739B2/en">US8204739B2</a></td><td>利用者コミュニティの訂正・新語共有及び確率調整</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8532994B2/en">US8532994B2</a></td><td>本人又はソーシャルグラフ由来の語彙で認識を個人化</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6488588B2/ja">JP6488588B2</a></td><td>ソーシャルグラフのデータを連絡先語彙へ利用</td></tr>
+  </tbody></table>
+
+  <h3>10.6　学習データ、モデル更新及び評価</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP4657736B2/ja">JP4657736B2／US8019602B2</a></td><td>文字変更が訂正か編集かを推論し選択的に学習</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7146038B2/ja">JP7146038B2</a></td><td>複数の書き起こしと事後確率を用いるモデル更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7104247B2/ja">JP7104247B2</a></td><td>登録文字を合成音声化して認識モデル更新へ使用</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7858433B2/ja">JP7858433B2</a></td><td>疑似認識で誤りやすい表現を抽出し学習コーパスを選択</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2012108429A/ja">JP2012108429A</a></td><td>認識器間の一致度等で学習対象音声を選別</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6526608B2/ja">JP6526608B2</a></td><td>語彙登録前後の変化例を表示して副作用を評価</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5921601B2/ja">JP5921601B2</a></td><td>過去に除外した候補を次回の候補集合から除外</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/WO2023113422A1/en">WO2023113422A1</a></td><td>検証失敗時に適応前モデルへ切替え又はリセット</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8280733B2/en">US8280733B2</a></td><td>訂正か意図変更かを分類し、選択的に語彙へ追加</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8977547B2/en">US8977547B2</a></td><td>複数発話の安定性に基づいて登録可否又は再発話を制御</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20190035385A1/en">US20190035385A1</a></td><td>正誤入力、訂正、n-best候補及び訂正結果による学習</td></tr>
+  </tbody></table>
+</section>
+</main></body>
+</html>

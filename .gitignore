@@ -4,3 +4,4 @@ __pycache__/
 out/
 *.wav
 uv.lock
+manifest.txt

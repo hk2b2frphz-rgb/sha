@@ -5,12 +5,21 @@ description = "専門用語から発話例文を生成し音声合成する (ASR
 requires-python = ">=3.11"
 dependencies = [
     "accelerate",
+    "ctranslate2",
+    "datasets",
+    "faster-whisper",
+    "fugashi",
+    "librosa",
     "numpy",
+    "peft",
+    "openai>=1.0.0",
+    "PyYAML",
     "qwen-tts",
     "soundfile",
     "torch>=2.1.0",
     "torchaudio>=2.1.0",
     "transformers>=4.51.0",
+    "unidic-lite",
 ]
 
 [tool.uv]

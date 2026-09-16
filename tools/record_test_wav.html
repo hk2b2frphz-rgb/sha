@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音声テストデータ録音ツール</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --panel2: #232733;
+    --border: #333846;
+    --text: #e6e8ee;
+    --muted: #9aa2b1;
+    --accent: #4f8cff;
+    --accent2: #2ec39b;
+    --danger: #ff5470;
+    --warn: #ffb454;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Yu Gothic UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  .grow { flex: 1; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
+  textarea, input, select {
+    width: 100%;
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  textarea { min-height: 160px; resize: vertical; font-family: "Consolas", monospace; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .row > div { flex: 1; min-width: 120px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter .15s, opacity .15s;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.12); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.ghost { background: var(--panel2); border: 1px solid var(--border); }
+  button.rec { background: var(--danger); }
+  button.ok { background: var(--accent2); }
+  .btnbar { display: flex; gap: 10px; flex-wrap: wrap; }
+  .hidden { display: none !important; }
+
+  /* Recorder view */
+  .progress {
+    display: flex; align-items: center; gap: 12px;
+    color: var(--muted); font-size: 13px; margin-bottom: 12px;
+  }
+  .bar { flex: 1; height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent2); width: 0; transition: width .2s; }
+  .sentence {
+    font-size: 30px; font-weight: 600; text-align: center;
+    padding: 40px 20px; background: var(--panel2);
+    border-radius: 12px; margin-bottom: 16px; min-height: 120px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .meter {
+    height: 10px; background: var(--panel2); border-radius: 5px; overflow: hidden; margin-bottom: 16px;
+  }
+  .meter > div { height: 100%; width: 0; background: linear-gradient(90deg,var(--accent2),var(--warn),var(--danger)); }
+  .status { font-size: 13px; color: var(--muted); min-height: 20px; text-align: center; margin-bottom: 12px; }
+  .rec-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--danger); margin-right:6px; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  audio { width: 100%; margin-top: 8px; }
+
+  /* List */
+  .list { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer;
+  }
+  .item:last-child { border-bottom: none; }
+  .item:hover { background: var(--panel2); }
+  .item.active { background: rgba(79,140,255,.15); }
+  .item .idx { color: var(--muted); width: 28px; flex-shrink: 0; }
+  .item .txt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+  .item .dot.done { background: var(--accent2); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  kbd { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); color: var(--muted); }
+  a.dl { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎙️ 音声テストデータ録音ツール</h1>
+  <span class="tag" id="fmtTag">16kHz / mono / 16-bit WAV</span>
+  <div class="grow"></div>
+  <span id="savedInfo" class="tag"></span>
+</header>
+
+<main>
+  <!-- Setup -->
+  <div class="card" id="setupCard">
+    <div class="row" style="align-items:center; margin-bottom:6px;">
+      <label style="margin:0;">読み上げテキスト（1行 = 1文）。<code>#</code> 始まりと空行は無視されます。</label>
+      <div class="grow"></div>
+      <button class="ghost" id="loadFileBtn" style="padding:6px 12px; font-size:13px;">📄 txtファイルを読み込む</button>
+      <input type="file" id="fileInput" accept=".txt,.tsv,text/plain" class="hidden">
+    </div>
+    <textarea id="sentences" placeholder="活性汚泥法は下水処理で広く使われています。&#10;最終沈殿池の運転状況を確認してください。&#10;膜分離活性汚泥法による処理性能を評価します。"></textarea>
+    <div class="hint" id="fileInfo"></div>
+    <div class="row" style="margin-top:14px;">
+      <div>
+        <label>ファイル名の開始番号</label>
+        <input type="number" id="startIdx" value="1" min="0">
+      </div>
+      <div>
+        <label>ファイル名プレフィックス（任意）</label>
+        <input type="text" id="prefix" placeholder="例: spk1_ → spk1_1.wav">
+      </div>
+      <div>
+        <label>マイク</label>
+        <select id="micSel"></select>
+      </div>
+    </div>
+    <div class="btnbar" style="margin-top:16px;">
+      <button id="startBtn">▶ 録音を開始</button>
+      <span class="hint" style="align-self:center;">マイクの使用許可を求められたら「許可」を選んでください。</span>
+    </div>
+  </div>
+
+  <!-- Recorder -->
+  <div class="card hidden" id="recCard">
+    <div class="progress">
+      <span id="progText">1 / 3</span>
+      <div class="bar"><div id="progBar"></div></div>
+      <span id="doneCount">録音済 0</span>
+    </div>
+    <div class="sentence" id="curSentence">—</div>
+    <div class="meter"><div id="meterBar"></div></div>
+    <div class="status" id="status">準備完了</div>
+    <div class="btnbar" style="justify-content:center;">
+      <button class="ghost" id="prevBtn">◀ 前へ</button>
+      <button class="rec" id="recBtn">● 録音（Space）</button>
+      <button class="ok" id="redoBtn" disabled>↺ 録り直し（R）</button>
+      <button class="ghost" id="playBtn" disabled>▶ 再生</button>
+      <button class="ghost" id="delBtn" disabled>🗑 削除</button>
+      <button class="ghost" id="nextBtn">次へ ▶</button>
+    </div>
+    <audio id="player" controls class="hidden"></audio>
+    <div class="hint" style="margin-top:14px; text-align:center;">
+      <kbd>Space</kbd> 録音/停止 ・ <kbd>R</kbd> 録り直し ・ <kbd>P</kbd> 再生 ・ <kbd>←</kbd>/<kbd>→</kbd> 移動
+    </div>
+  </div>
+
+  <!-- List + export -->
+  <div class="card hidden" id="listCard">
+    <div class="row" style="align-items:center; margin-bottom:12px;">
+      <label style="margin:0;">録音リスト（クリックで移動）</label>
+      <div class="grow"></div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="btnbar" style="margin-top:16px;">
+      <button class="ok" id="saveDirBtn">📁 フォルダに保存（Edge）</button>
+      <button class="ghost" id="zipBtn">⬇ まとめてダウンロード（ZIP）</button>
+      <button class="ghost" id="refsBtn">⬇ references.tsv のみ</button>
+    </div>
+    <div class="hint" id="exportHint" style="margin-top:10px;">
+      「フォルダに保存」で <code>data/test_wav/</code> を選ぶと、WAV と references.tsv が直接書き出されます。
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const TARGET_SR = 16000;
+
+let items = [];          // {text, idx, name, blob(wav), url}
+let cur = 0;
+let stream = null, audioCtx = null, srcNode = null, procNode = null, analyser = null;
+let recording = false, chunks = [], meterRAF = null;
+
+// ---------- mic enumerate ----------
+// Labels are empty until mic permission is granted (on "録音を開始"); we
+// re-enumerate afterwards. We do NOT call getUserMedia here to avoid a
+// premature permission prompt on page load.
+async function listMics() {
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  const mics = devs.filter(d => d.kind === "audioinput");
+  const sel = $("micSel");
+  sel.innerHTML = "";
+  mics.forEach((d, i) => {
+    const o = document.createElement("option");
+    o.value = d.deviceId;
+    o.textContent = d.label || `マイク ${i + 1}`;
+    sel.appendChild(o);
+  });
+  if (!mics.length) {
+    const o = document.createElement("option");
+    o.textContent = "（既定のマイク）"; sel.appendChild(o);
+  }
+}
+listMics();
+navigator.mediaDevices.addEventListener?.("devicechange", listMics);
+
+// ---------- load sentences from a .txt file ----------
+$("loadFileBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = async () => {
+  const f = $("fileInput").files[0];
+  if (!f) return;
+  const text = await f.text();
+  // If TSV (has tabs), take the last column as the sentence; else raw lines.
+  const lines = text.split(/\r?\n/).map(l => {
+    const t = l.replace(/\r$/, "");
+    if (t.includes("\t")) { const c = t.split("\t"); return c[c.length - 1]; }
+    return t;
+  });
+  $("sentences").value = lines.join("\n");
+  const n = lines.map(s => s.trim()).filter(s => s && !s.startsWith("#")).length;
+  $("fileInfo").textContent = `読み込み: ${f.name}（有効 ${n} 文）`;
+  $("fileInput").value = "";
+};
+
+// ---------- start session ----------
+$("startBtn").onclick = async () => {
+  const lines = $("sentences").value.split(/\r?\n/)
+    .map(s => s.trim())
+    .filter(s => s && !s.startsWith("#"));
+  if (!lines.length) { alert("読み上げテキストを1行以上入力してください。"); return; }
+
+  const start = parseInt($("startIdx").value, 10) || 0;
+  const prefix = $("prefix").value.trim();
+  items = lines.map((text, i) => {
+    const n = start + i;
+    return { text, idx: n, name: `${prefix}${n}.wav`, blob: null, url: null };
+  });
+
+  try {
+    const deviceId = $("micSel").value;
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: deviceId ? { exact: deviceId } : undefined,
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+    });
+  } catch (e) {
+    alert("マイクにアクセスできませんでした: " + e.message); return;
+  }
+  setupAudioGraph();
+  await listMics(); // now labels are available
+  cur = 0;
+  $("setupCard").classList.add("hidden");
+  $("recCard").classList.remove("hidden");
+  $("listCard").classList.remove("hidden");
+  renderList();
+  showCurrent();
+};
+
+function setupAudioGraph() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  srcNode = audioCtx.createMediaStreamSource(stream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 512;
+  srcNode.connect(analyser);
+}
+
+// ---------- recording (raw PCM capture) ----------
+function startRec() {
+  if (recording) return;
+  chunks = [];
+  const buf = 4096;
+  procNode = audioCtx.createScriptProcessor(buf, 1, 1);
+  procNode.onaudioprocess = e => {
+    chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  };
+  srcNode.connect(procNode);
+  procNode.connect(audioCtx.destination); // required for onaudioprocess to fire
+  recording = true;
+  $("recBtn").textContent = "■ 停止（Space）";
+  $("recBtn").classList.remove("rec"); $("recBtn").classList.add("ok");
+  $("status").innerHTML = '<span class="rec-dot"></span>録音中…';
+  drawMeter();
+}
+
+function stopRec() {
+  if (!recording) return;
+  recording = false;
+  procNode.disconnect(); srcNode.disconnect(procNode);
+  procNode = null;
+  cancelAnimationFrame(meterRAF); $("meterBar").style.width = "0";
+  $("recBtn").textContent = "● 録音（Space）";
+  $("recBtn").classList.add("rec"); $("recBtn").classList.remove("ok");
+
+  const wav = encodeWav(mergeChunks(chunks), audioCtx.sampleRate, TARGET_SR);
+  const it = items[cur];
+  if (it.url) URL.revokeObjectURL(it.url);
+  it.blob = wav; it.url = URL.createObjectURL(wav);
+  $("player").src = it.url; $("player").classList.remove("hidden");
+  setTakeButtons(true);
+  const secs = (mergeChunks(chunks).length / audioCtx.sampleRate).toFixed(1);
+  $("status").textContent = `録音完了（${secs} 秒） — 再生して確認できます`;
+  renderList(); updateProgress();
+}
+
+function toggleRec() { recording ? stopRec() : startRec(); }
+
+function drawMeter() {
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  const loop = () => {
+    analyser.getByteTimeDomainData(data);
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i] - 128));
+    $("meterBar").style.width = Math.min(100, (peak / 128) * 140) + "%";
+    meterRAF = requestAnimationFrame(loop);
+  };
+  loop();
+}
+
+function mergeChunks(cks) {
+  let len = 0; cks.forEach(c => len += c.length);
+  const out = new Float32Array(len);
+  let o = 0; cks.forEach(c => { out.set(c, o); o += c.length; });
+  return out;
+}
+
+function downsample(buf, inRate, outRate) {
+  if (outRate >= inRate) return buf;
+  const ratio = inRate / outRate;
+  const outLen = Math.round(buf.length / ratio);
+  const out = new Float32Array(outLen);
+  let oPos = 0, iPos = 0;
+  while (oPos < outLen) {
+    const next = Math.round((oPos + 1) * ratio);
+    let sum = 0, cnt = 0;
+    for (let i = iPos; i < next && i < buf.length; i++) { sum += buf[i]; cnt++; }
+    out[oPos] = cnt ? sum / cnt : 0;
+    oPos++; iPos = next;
+  }
+  return out;
+}
+
+function encodeWav(samples, inRate, outRate) {
+  const data = downsample(samples, inRate, outRate);
+  const buffer = new ArrayBuffer(44 + data.length * 2);
+  const view = new DataView(buffer);
+  const wr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+  wr(0, "RIFF"); view.setUint32(4, 36 + data.length * 2, true); wr(8, "WAVE");
+  wr(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true); view.setUint32(24, outRate, true);
+  view.setUint32(28, outRate * 2, true); view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true); wr(36, "data"); view.setUint32(40, data.length * 2, true);
+  let off = 44;
+  for (let i = 0; i < data.length; i++) {
+    const s = Math.max(-1, Math.min(1, data[i]));
+    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true); off += 2;
+  }
+  return new Blob([view], { type: "audio/wav" });
+}
+
+// ---------- navigation ----------
+function setTakeButtons(hasTake) {
+  $("playBtn").disabled = !hasTake;
+  $("redoBtn").disabled = !hasTake;
+  $("delBtn").disabled = !hasTake;
+}
+function showCurrent() {
+  const it = items[cur];
+  $("curSentence").textContent = it.text;
+  $("progText").textContent = `${cur + 1} / ${items.length}`;
+  if (it.url) {
+    $("player").src = it.url; $("player").classList.remove("hidden");
+    $("status").textContent = `録音済み — ${it.name}（録り直しは R）`;
+  } else {
+    $("player").classList.add("hidden");
+    $("status").textContent = `未録音 — ${it.name}`;
+  }
+  setTakeButtons(!!it.blob);
+  updateProgress(); highlightList();
+}
+
+// Discard the current take and immediately start a fresh recording.
+function redoRec() {
+  if (recording) return;
+  const it = items[cur];
+  if (it.url) URL.revokeObjectURL(it.url);
+  it.blob = null; it.url = null;
+  $("player").classList.add("hidden"); setTakeButtons(false);
+  renderList(); updateProgress();
+  startRec();
+}
+
+// Delete the current take without re-recording.
+function delTake() {
+  if (recording) return;
+  const it = items[cur];
+  if (!it.blob) return;
+  if (it.url) URL.revokeObjectURL(it.url);
+  it.blob = null; it.url = null;
+  $("player").classList.add("hidden"); setTakeButtons(false);
+  $("status").textContent = `削除しました（未録音） — ${it.name}`;
+  renderList(); updateProgress();
+}
+function go(d) { if (recording) stopRec(); cur = Math.max(0, Math.min(items.length - 1, cur + d)); showCurrent(); }
+function updateProgress() {
+  const done = items.filter(i => i.blob).length;
+  $("progBar").style.width = (done / items.length * 100) + "%";
+  $("doneCount").textContent = `録音済 ${done}/${items.length}`;
+}
+
+$("recBtn").onclick = toggleRec;
+$("redoBtn").onclick = redoRec;
+$("delBtn").onclick = delTake;
+$("playBtn").onclick = () => { if (items[cur].url) $("player").play(); };
+$("prevBtn").onclick = () => go(-1);
+$("nextBtn").onclick = () => go(1);
+
+document.addEventListener("keydown", e => {
+  if ($("setupCard").classList.contains("hidden") === false) return;
+  if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+  if (e.code === "Space") { e.preventDefault(); toggleRec(); }
+  else if (e.key.toLowerCase() === "r") { e.preventDefault(); if (!$("redoBtn").disabled) redoRec(); }
+  else if (e.key.toLowerCase() === "p") { e.preventDefault(); $("playBtn").click(); }
+  else if (e.key === "ArrowLeft") go(-1);
+  else if (e.key === "ArrowRight") go(1);
+});
+
+// ---------- list ----------
+function renderList() {
+  const el = $("list"); el.innerHTML = "";
+  items.forEach((it, i) => {
+    const row = document.createElement("div");
+    row.className = "item" + (i === cur ? " active" : "");
+    row.innerHTML = `<span class="idx">${it.idx}</span>
+      <span class="dot ${it.blob ? "done" : ""}"></span>
+      <span class="txt">${escapeHtml(it.text)}</span>
+      <span class="tag">${it.name}</span>`;
+    row.onclick = () => { if (recording) stopRec(); cur = i; showCurrent(); };
+    el.appendChild(row);
+  });
+}
+function highlightList() {
+  [...$("list").children].forEach((r, i) => r.classList.toggle("active", i === cur));
+  [...$("list").querySelectorAll(".dot")].forEach((d, i) => d.classList.toggle("done", !!items[i].blob));
+}
+function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+// ---------- exports ----------
+function buildRefsTsv() {
+  // keyed by stem: build_test_manifest.py matches on wav stem
+  return items.filter(i => i.blob)
+    .map(i => `${i.name.replace(/\.wav$/, "")}\t${i.text}`).join("\n") + "\n";
+}
+
+$("refsBtn").onclick = () => {
+  const blob = new Blob([buildRefsTsv()], { type: "text/plain;charset=utf-8" });
+  triggerDl(blob, "references.tsv");
+};
+
+$("saveDirBtn").onclick = async () => {
+  if (!window.showDirectoryPicker) { alert("Microsoft Edge で開いてください（フォルダ保存に必要です）。"); return; }
+  const recorded = items.filter(i => i.blob);
+  if (!recorded.length) { alert("録音済みの音声がありません。"); return; }
+  try {
+    const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+    for (const it of recorded) {
+      const fh = await dir.getFileHandle(it.name, { create: true });
+      const w = await fh.createWritable(); await w.write(it.blob); await w.close();
+    }
+    const rh = await dir.getFileHandle("references.tsv", { create: true });
+    const rw = await rh.createWritable(); await rw.write(buildRefsTsv()); await rw.close();
+    $("savedInfo").textContent = `✓ ${recorded.length} 件 + references.tsv を保存`;
+  } catch (e) {
+    if (e.name !== "AbortError") alert("保存に失敗: " + e.message);
+  }
+};
+
+// Minimal ZIP (store, no compression) so no external libs are needed.
+$("zipBtn").onclick = () => {
+  const recorded = items.filter(i => i.blob);
+  if (!recorded.length) { alert("録音済みの音声がありません。"); return; }
+  const files = [];
+  const enc = new TextEncoder();
+  const push = (name, bytes) => files.push({ name, bytes });
+  Promise.all(recorded.map(it => it.blob.arrayBuffer().then(b => ({ it, b }))))
+    .then(arr => {
+      arr.forEach(({ it, b }) => push(it.name, new Uint8Array(b)));
+      push("references.tsv", enc.encode(buildRefsTsv()));
+      const zip = makeZip(files);
+      triggerDl(new Blob([zip], { type: "application/zip" }), "test_wav.zip");
+    });
+};
+
+function crc32(buf) {
+  let c, crc = 0xffffffff;
+  for (let n = 0; n < buf.length; n++) {
+    c = (crc ^ buf[n]) & 0xff;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    crc = (crc >>> 8) ^ c;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const u16 = n => new Uint8Array([n & 255, (n >> 8) & 255]);
+  const u32 = n => new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]);
+  files.forEach(f => {
+    const nameB = enc.encode(f.name), data = f.bytes, crc = crc32(data);
+    const local = concat([u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(data.length), u32(data.length), u16(nameB.length), u16(0), nameB, data]);
+    parts.push(local);
+    central.push(concat([u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(data.length), u32(data.length), u16(nameB.length), u16(0), u16(0), u16(0), u16(0),
+      u32(0), u32(offset), nameB]));
+    offset += local.length;
+  });
+  const cd = concat(central);
+  const end = concat([u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+    u32(cd.length), u32(offset), u16(0)]);
+  return concat([...parts, cd, end]);
+}
+function concat(arrs) {
+  let len = 0; arrs.forEach(a => len += a.length);
+  const out = new Uint8Array(len); let o = 0;
+  arrs.forEach(a => { out.set(a, o); o += a.length; });
+  return out;
+}
+function triggerDl(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+</script>
+</body>
+</html>

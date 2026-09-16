@@ -3,6 +3,10 @@
 専門用語リストから Gemma 4 で発話例文を生成し、Qwen3-TTS で音声合成する。
 音声認識 (ASR) のテストデータ作成用。
 
+`annotations.tsv` から Qwen3.6-27B/vLLMで学習文を作り、Qwen3-TTSを経て
+Whisperのencoder凍結・decoder fine-tuneとCTranslate2変換まで行うMiltoka向け手順は
+[README_whisper_domain_ft.md](README_whisper_domain_ft.md) を参照。
+
 ## パイプライン
 
 ```
@@ -11,9 +15,9 @@ PDF / PPTX / DOCX / 画像 (スキャン文書 OK)
 テキストファイル群
    ↓ scripts/extract_terms.py        (pypdf + Gemma 4)
 terms.txt (1 行 1 用語) ← 手書きのリストでも OK
-   ↓ scripts/generate_sentences.py   (Gemma 4)
-sentences.jsonl  {"id", "term", "sentence"}
-   ↓ scripts/synthesize_speech.py    (Qwen3-TTS)
+   ↓ scripts/generate_sentences.py   (Gemma 4)  ← 例文生成と同時に読み仮名も確認
+sentences.jsonl  {"id", "term", "sentence", "tts_text"}
+   ↓ scripts/synthesize_speech.py    (Qwen3-TTS)  ← tts_text を使って音声合成
 out/audio/wav/*.wav + manifest.jsonl (正解テキスト付き)
 ```
 
@@ -62,6 +66,7 @@ uv run --project gemma_runtime python scripts/generate_sentences.py \
     --sentences-per-term 3
 
 # 2. 例文 → 音声 (Qwen3-TTS)
+#    sentences.jsonl には tts_text が含まれており、synthesize_speech.py が自動的に使用する
 uv run python scripts/synthesize_speech.py \
     --sentences out/sentences.jsonl \
     --out-dir out/audio \
@@ -80,6 +85,8 @@ uv run python scripts/synthesize_speech.py \
 | extract_terms.py | `--chunk-chars` | 3000 | Gemma に渡すチャンクの文字数 |
 | | `--min-count` | 1 | この回数以上のチャンクに出た用語のみ採用 |
 | | `--max-terms` | 0 (無制限) | 出力する用語数の上限 |
+| annotate_readings.py | `--model` | gpt-4o | 読み確認に使う OpenAI モデル |
+| | `--interval` | 0.5 | API 呼び出し間隔（秒） |
 | generate_sentences.py | `--sentences-per-term` | 3 | 用語あたりの例文数 |
 | | `--model` | google/gemma-4-E2B-it | Gemma モデル ID |
 | | `--temperature` | 0.8 | 生成の多様性 |
@@ -105,5 +112,5 @@ NG がある場合は全出力をコピーして共有する。
 `out/audio/manifest.jsonl` (1 行 1 音声):
 
 ```json
-{"id": "0001", "term": "心筋梗塞", "sentence": "祖父が心筋梗塞で入院したと連絡があった。", "wav": "wav/0001.wav", "duration_sec": 3.42, "speaker": "Vivian"}
+{"id": "0001", "term": "深層学習", "sentence": "深層学習の研究発表を聴講した。", "wav": "wav/0001.wav", "duration_sec": 3.42, "speaker": "Vivian"}
 ```
