@@ -52,11 +52,14 @@
       </svg>
     </div>
   </figure>
-  <table><thead><tr><th>従来フローの要素</th><th>先行公報で確認した内容</th></tr></thead><tbody>
-    <tr><td>専門語を発話し、実際の誤認識と正しい語を対応付ける</td><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a>、<a href="https://patents.google.com/patent/JP6718182B1/ja">JP6718182B1</a></td></tr>
-    <tr><td>誤認識語を検出し、登録した正しい語へ置換する</td><td><a href="https://patents.google.com/patent/JP2018045001A/ja">JP2018045001A</a>、<a href="https://patents.google.com/patent/JP2025514770A/en">JP2025514770A</a></td></tr>
-    <tr><td>一つの置換元が複数の変換先と競合する</td><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a>、<a href="https://patents.google.com/patent/US20090254819A1/en">US20090254819A1</a></td></tr>
-    <tr><td>文脈又はLLMにより認識候補を再評価する</td><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a>、<a href="https://patents.google.com/patent/JP2025135075A/en">JP2025135075A</a></td></tr>
+  <table><thead><tr><th>文献・確認請求項</th><th>請求項で確認した構成</th><th>今回案との関係</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a><br>公開請求項1・5・7～9</td><td>請求項1は専門語と誤認識語の対応表による自動置換を要求する。請求項8は専門語の発話から誤認識語を取得し、請求項9は複数話者から一専門語に対する複数の誤認識語を登録する。</td><td>実発話から誤認識群を作り、再学習なしで置換する部分が直接近い。複数の正解語が同じ誤認識に重なる場合の選択は確認項にない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6718182B1/ja">JP6718182B1</a><br>登録請求項1・3</td><td>請求項1は入力語を音声データ化し、異なる解析語を誤変換語として両者を辞書へ関連付ける。請求項3は後続音声が誤変換語と一致した時に正しい候補を抽出する。</td><td>誤認識と正しい語の対応生成及び将来利用が近い。複数置換先の選択や意味・用例の利用は確認項にない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2018045001A/ja">JP2018045001A</a><br>公開請求項1～11</td><td>誤認識語と正しい専門語の変換表による置換を含み、請求項2～6は誤認識確率、認識信頼度、話題及び閾値に基づく適用条件を要求する。</td><td>固定置換を無条件に適用せず、話題・信頼度で制御する点が近い。同一誤認識に複数の正解語を保持する構成ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a><br>登録請求項1～8、特に1・5</td><td>対話語群から類似語を抽出し、同一類似語が複数の変換先へ対応する場合、母音・子音の類似性に基づく優先度で一つの変換先へ割り当てて変換表を生成する。</td><td>置換先の競合を直接扱う。今回案はテーブル生成時に一つへ固定せず、後続発話ごとに選択する。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20090254819A1/en">US20090254819A1</a><br>公開請求項1・4・6～8・15・17・19～21</td><td>一つの誤表記に複数の正解候補を対応付け、候補別の文脈情報からスコアを求めて置換先を選択する。文脈判定が不要な語を直接置換する分岐も含む。</td><td>一対多の辞書、必要時だけの文脈処理という制御が強く近い。対象は文字入力のスペル訂正で、実発話によるASR誤り群の生成ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a><br>公開請求項1・4・7</td><td>訂正履歴、個人クラス及びアプリケーション文脈を用いて認識候補を追加又は再順位付けする。</td><td>個人情報と文脈を使う二段補正が近い。誤認識候補の重複数を発動条件とする構成は確認項にない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2025135075A/en">JP2025135075A</a><br>公開請求項1・5・6</td><td>請求項1はE2E音声認識結果と利用者に関連する固有語彙をLLMへ入力し、誤認識文字列を訂正する処理を要求する。</td><td>利用者語彙を用いるLLM後補正が直接近い。置換先が一意の場合にLLMを省略する分岐は確認項にない。</td></tr>
   </tbody></table>
   <p class="note">したがって、図1の各要素自体を新規点とはしにくい。本方式では、誤り候補の重複を判定し、一意の場合は軽量な直接置換、重複時だけLLM補正へ切り替える連結を中心に検討する。</p>
   <p>一方、同じ専門語であっても、使用するASR、話者、発話速度、前後の文章又はデコード条件によって認識誤りが変化する。そのため、複数のASRによる認識、複数回の発話、又は専門語を含む複数の文章をTTSで生成して再認識することにより、一つの専門語に対して複数の認識誤りを収集する方式が考えられる。</p>
@@ -197,14 +200,14 @@
 </section>
 
 <section>
-  <h2>8．主な近接特許</h2>
-  <table><thead><tr><th>文献</th><th>確認した技術</th><th>本方式との関係</th></tr></thead><tbody>
-    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a></td><td>専門語の実発話とASRの誤認識語を対応表へ登録</td><td>認識誤りから正しい語への置換が近い</td></tr>
-    <tr><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a></td><td>一つの類似語が複数の変換先に対応する場合、優先度で一つへ割当て</td><td>置換元の競合を直接扱う。本方式は競合時に文脈補正へ切り替える</td></tr>
-    <tr><td><a href="https://patents.google.com/patent/US20090254819A1/en">US20090254819A1</a></td><td>一つの誤表記に複数の正解を対応付け、文脈統計で選択</td><td>一対多の辞書と文脈選択が近い</td></tr>
-    <tr><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a></td><td>訂正履歴、個人クラス、アプリ文脈による候補の再順位付け</td><td>個人化された二段補正が近い</td></tr>
-    <tr><td><a href="https://patents.google.com/patent/US20250335933A1/en">US20250335933A1</a></td><td>不明語の定義を質問・保存し、競合する定義を文脈で区別</td><td>意味の保存と競合時判断が近い</td></tr>
-    <tr><td><a href="https://patents.justia.com/patent/5754977">US5754977A</a></td><td>登録時に新旧音声パターンの混同を検出</td><td>登録語間の競合検出が近い</td></tr>
+  <h2>8．主要文献の請求項比較</h2>
+  <table><thead><tr><th>文献・確認範囲</th><th>請求項上の近接点</th><th>残る差分</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a><br>公開1・5・7～9</td><td>実発話による誤認識語収集、専門語との対応表及び自動置換</td><td>同一誤認識に複数の正解語が対応する場合の選択</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a><br>登録1～8、特に1・5</td><td>一つの類似語が複数の変換先と競合する場合の解消</td><td>候補を保持し、後続発話ごとに文脈選択する点</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20090254819A1/en">US20090254819A1</a><br>公開1・4・6～8・15・17・19～21</td><td>一対多の訂正辞書、候補別文脈スコア及び直接置換との分岐</td><td>ASRの実発話、登録音声及び利用者が登録した意味・用例</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a><br>公開1・4・7</td><td>訂正履歴、個人情報及びアプリ文脈による候補再順位付け</td><td>置換候補の重複検出をLLM起動条件とする点</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20250335933A1/en">US20250335933A1</a><br>公開請求項1、本文【0145】</td><td>不明語の定義を質問・保存し、矛盾する定義を文脈で区別</td><td>異なる正解表記が同一のASR誤認識へ収束する問題ではない。全20項は未精査</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2025135075A/en">JP2025135075A</a><br>公開1・5・6</td><td>利用者固有語彙とASR結果をLLMへ入力する後補正</td><td>一意な候補を直接置換し、重複時だけLLMを起動する分岐</td></tr>
   </tbody></table>
 </section>
 
@@ -221,6 +224,7 @@
 
 <section>
   <h2>10．調査済み特許の体系的一覧</h2>
+  <p>以下は調査範囲を技術分野別に把握するための索引である。特許性の比較に用いる主要文献については、第1節及び第8節に確認した請求項番号と構成要件を示した。その他の文献は、番号や概要だけから本方式と重複すると判断せず、必要に応じて独立請求項及びその引用関係を追加確認する。</p>
   <h3>10.1　専門語登録、辞書及び誤認識対応表</h3>
   <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
     <tr><td><a href="https://patents.google.com/patent/JP5366169B2/ja">JP5366169B2</a></td><td>訂正語に対応する音声区間の音素列を取得して語彙へ登録</td></tr>
