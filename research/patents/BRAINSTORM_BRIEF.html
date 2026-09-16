@@ -25,6 +25,26 @@
   <h2>1．背景技術</h2>
   <p>音声認識結果に含まれる専門語の誤りを補正する方法として、実際の認識誤りと正しい語彙との対応を辞書に登録し、同じ認識結果が現れた場合に置換する方式がある。</p>
   <div class="example"><span class="term">正しい専門語：</span>最終沈殿池<br><span class="term">認識結果：</span>最終沈殿地<br><span class="term">処理：</span>「最終沈殿地」を検出した場合、「最終沈殿池」へ置換する。</div>
+  <figure class="figure">
+    <div class="figure-title">図1　従来の誤認識置換方式</div>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 190" role="img" aria-labelledby="prior-title prior-desc">
+        <title id="prior-title">従来の誤認識置換方式のフローチャート</title>
+        <desc id="prior-desc">専門語の発話から認識誤りを取得し、正しい専門語との対応を保存し、後続の認識結果で同じ誤りを検出した場合に直接置換する。</desc>
+        <defs><marker id="arrow-prior" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <style>.prior-line{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow-prior)}</style>
+        <rect class="box" x="15" y="60" width="155" height="70" rx="2"/><text x="92.5" y="91"><tspan class="strong">専門語を発話</tspan><tspan x="92.5" dy="22">「最終沈殿池」</tspan></text>
+        <path class="prior-line" d="M170 95 H200"/>
+        <rect class="box process" x="200" y="60" width="155" height="70" rx="2"/><text x="277.5" y="91"><tspan class="strong">ASRで誤認識</tspan><tspan x="277.5" dy="22">「最終沈殿地」</tspan></text>
+        <path class="prior-line" d="M355 95 H385"/>
+        <rect class="box" x="385" y="60" width="160" height="70" rx="2"/><text x="465" y="91"><tspan class="strong">対応を保存</tspan><tspan x="465" dy="22">誤り → 正しい語</tspan></text>
+        <path class="prior-line" d="M545 95 H575"/>
+        <rect class="box process" x="575" y="60" width="150" height="70" rx="2"/><text x="650" y="91"><tspan class="strong">同じ誤りを</tspan><tspan x="650" dy="22">検出</tspan></text>
+        <path class="prior-line" d="M725 95 H755"/>
+        <rect class="box" x="755" y="60" width="130" height="70" rx="2"/><text x="820" y="91"><tspan class="strong">直接置換</tspan><tspan x="820" dy="22">正しい語へ</tspan></text>
+      </svg>
+    </div>
+  </figure>
   <p>一方、同じ専門語であっても、使用するASR、話者、発話速度、前後の文章又はデコード条件によって認識誤りが変化する。そのため、複数のASRによる認識、複数回の発話、又は専門語を含む複数の文章をTTSで生成して再認識することにより、一つの専門語に対して複数の認識誤りを収集する方式が考えられる。</p>
 </section>
 
@@ -37,34 +57,52 @@
 <section>
   <h2>3．提案方式</h2>
   <h3>3.1　辞書登録処理</h3>
-  <p>専門語を登録する際は、正しい表記及び発音に加えて、当該専門語の意味と用例を同時に登録する。意味・用例は、後に誤認識候補が別の登録語と重複した場合の文脈判断に用いる。</p>
+  <p>一語の専門語について、正しい表記を登録し、その語を利用者が発話し、さらに意味及び用例を説明する。これらを一つの専門語レコードとして保存する。</p>
   <figure class="figure">
-    <div class="figure-title">図1　辞書登録処理</div>
+    <div class="figure-title">図2　一語分の辞書登録処理</div>
     <div class="diagram-wrap">
-      <svg class="diagram" viewBox="0 0 900 190" role="img" aria-labelledby="fig1-title fig1-desc">
-        <title id="fig1-title">辞書登録処理のフローチャート</title>
-        <desc id="fig1-desc">正しい表記、発音、意味、用例を登録し、複数の認識条件で誤りを生成し、収集と正規化を経て専門語へ対応付けて保存する。</desc>
-        <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
-        <rect class="box" x="20" y="55" width="180" height="80" rx="2"/>
-        <text x="110" y="82"><tspan class="strong" x="110">専門語を登録</tspan><tspan x="110" dy="22">表記・発音</tspan><tspan x="110" dy="20">意味・用例</tspan></text>
-        <path class="connector" d="M200 95 H245"/>
-        <rect class="box process" x="245" y="55" width="180" height="80" rx="2"/>
-        <text x="335" y="84"><tspan class="strong" x="335">認識を実行</tspan><tspan x="335" dy="22">複数ASR・複数文脈</tspan><tspan x="335" dy="20">TTS再認識等</tspan></text>
-        <path class="connector" d="M425 95 H470"/>
-        <rect class="box" x="470" y="55" width="180" height="80" rx="2"/>
-        <text x="560" y="86"><tspan class="strong" x="560">認識誤り群</tspan><tspan x="560" dy="23">収集・正規化</tspan></text>
-        <path class="connector" d="M650 95 H695"/>
-        <rect class="box" x="695" y="55" width="185" height="80" rx="2"/>
-        <text x="787.5" y="84"><tspan class="strong" x="787.5">辞書へ保存</tspan><tspan x="787.5" dy="22">専門語情報と</tspan><tspan x="787.5" dy="20">認識誤り群を対応付け</tspan></text>
+      <svg class="diagram" viewBox="0 0 900 190" role="img" aria-labelledby="reg-title reg-desc">
+        <title id="reg-title">一語分の辞書登録処理のフローチャート</title>
+        <desc id="reg-desc">専門語の正しい表記を登録し、その専門語を発話し、意味と用例を説明して一語分の登録を完了する。</desc>
+        <defs><marker id="arrow-reg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <style>.reg-line{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow-reg)}</style>
+        <rect class="box" x="25" y="60" width="175" height="70" rx="2"/><text x="112.5" y="91"><tspan class="strong">専門語の表記を</tspan><tspan x="112.5" dy="22">登録</tspan></text>
+        <path class="reg-line" d="M200 95 H245"/>
+        <rect class="box" x="245" y="60" width="175" height="70" rx="2"/><text x="332.5" y="91"><tspan class="strong">専門語を</tspan><tspan x="332.5" dy="22">発話</tspan></text>
+        <path class="reg-line" d="M420 95 H465"/>
+        <rect class="box" x="465" y="60" width="185" height="70" rx="2"/><text x="557.5" y="91"><tspan class="strong">意味・用例を</tspan><tspan x="557.5" dy="22">説明</tspan></text>
+        <path class="reg-line" d="M650 95 H695"/>
+        <rect class="box process" x="695" y="60" width="180" height="70" rx="2"/><text x="785" y="91"><tspan class="strong">一語分の</tspan><tspan x="785" dy="22">辞書登録完了</tspan></text>
       </svg>
     </div>
-    <figcaption class="caption">意味・用例は、競合発生後に追加するのではなく、専門語の登録時に保存する。</figcaption>
+    <figcaption class="caption">表記、登録音声、意味及び用例を一語の単位で保存する。</figcaption>
   </figure>
 
-  <h3>3.2　認識時の補正処理</h3>
+  <h3>3.2　認識誤り候補の生成</h3>
+  <p>辞書登録とは別に、登録音声、複数のASR、前後文を変更した発話又はTTS再認識を用いて、当該専門語に対する複数の認識誤り候補を取得し、一語分の専門語レコードへ対応付ける。</p>
+  <figure class="figure">
+    <div class="figure-title">図3　認識誤り候補の生成処理</div>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 190" role="img" aria-labelledby="error-title error-desc">
+        <title id="error-title">認識誤り候補の生成処理のフローチャート</title>
+        <desc id="error-desc">登録済み専門語を複数の条件で認識させ、複数の認識誤りを収集して専門語レコードへ対応付ける。</desc>
+        <defs><marker id="arrow-error" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <style>.error-line{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow-error)}</style>
+        <rect class="box" x="20" y="55" width="180" height="80" rx="2"/><text x="110" y="85"><tspan class="strong">登録済み専門語</tspan><tspan x="110" dy="23">表記・音声・用例</tspan></text>
+        <path class="error-line" d="M200 95 H245"/>
+        <rect class="box process" x="245" y="55" width="180" height="80" rx="2"/><text x="335" y="84"><tspan class="strong">認識を実行</tspan><tspan x="335" dy="22">複数ASR・前後文変更</tspan><tspan x="335" dy="20">TTS再認識等</tspan></text>
+        <path class="error-line" d="M425 95 H470"/>
+        <rect class="box" x="470" y="55" width="180" height="80" rx="2"/><text x="560" y="86"><tspan class="strong">複数の認識誤り</tspan><tspan x="560" dy="23">を取得</tspan></text>
+        <path class="error-line" d="M650 95 H695"/>
+        <rect class="box" x="695" y="55" width="185" height="80" rx="2"/><text x="787.5" y="84"><tspan class="strong">専門語レコードへ</tspan><tspan x="787.5" dy="22">認識誤り群を</tspan><tspan x="787.5" dy="20">対応付け</tspan></text>
+      </svg>
+    </div>
+  </figure>
+
+  <h3>3.3　認識時の補正処理</h3>
   <p>認識結果が登録済みの誤り候補と一致した場合、その誤り候補に対応する登録語の数を判定する。対応する登録語が一つの場合は直接置換し、複数の場合に限って文脈補正を実行する。</p>
   <figure class="figure">
-    <div class="figure-title">図2　認識時の補正処理</div>
+    <div class="figure-title">図4　認識時の補正処理</div>
     <div class="diagram-wrap">
       <svg class="diagram" viewBox="0 0 900 520" role="img" aria-labelledby="fig2-title fig2-desc">
         <title id="fig2-title">認識時の補正処理のフローチャート</title>
