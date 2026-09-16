@@ -63,6 +63,15 @@
   </tbody></table>
   <p class="note">したがって、図1の各要素自体を新規点とはしにくい。本方式では、誤り候補の重複を判定し、一意の場合は軽量な直接置換、重複時だけLLM補正へ切り替える連結を中心に検討する。</p>
   <p>一方、同じ専門語であっても、使用するASR、話者、発話速度、前後の文章又はデコード条件によって認識誤りが変化する。そのため、複数のASRによる認識、複数回の発話、又は専門語を含む複数の文章をTTSで生成して再認識することにより、一つの専門語に対して複数の認識誤りを収集する方式が考えられる。</p>
+  <table><thead><tr><th>文献・確認請求項</th><th>請求項で確認した構成</th><th>本方式との関係</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a><br>公開請求項8・9</td><td>請求項8は専門語をマイクへ発話して誤認識語を取得する。請求項9は複数話者の参照発話から、一つの専門語に対する複数の誤認識語を対応表へ登録する。</td><td>一語に対する複数の誤認識候補を実発話から収集する点が直接近い。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5148671B2/ja">JP5148671B2</a><br>登録請求項5</td><td>一回の入力に対し、複数方式又は同一方式による複数の認識結果を取得し、結果間の差分から誤認識部分を抽出する。</td><td>複数ASR又は複数回認識を用いること自体が近い。専門語ごとの誤認識候補を置換辞書へ登録する請求項ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US6122613A/en">US6122613A</a><br>請求項1～4</td><td>同一音声を性能又は方式の異なる複数の音声認識器で処理し、複数の認識結果を統合する。</td><td>複数ASRの利用は既知。目的は認識結果の統合であり、誤認識文字列群を辞書化するものではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US7529668B2/en">US7529668B2</a><br>登録請求項1・14～18・20・33～37</td><td>複数の発音観測を音素単位で整列し、多数派の発音を求め、妥当性確認後に発音辞書へ追加する。</td><td>複数発話の収集及び辞書登録が近い。対象は発音表現であり、ASRが出力した複数の誤認識文字列ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8977547B2/en">US8977547B2</a><br>登録請求項1～4</td><td>登録対象を複数回発話させ、発話間の音響類似度が閾値以上の場合に登録し、不一致の場合は再発話又は登録失敗へ分岐する。</td><td>複数回発話と登録制御が近い。誤認識候補の文字列を複数収集する処理ではない。</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6718182B1/ja">JP6718182B1</a><br>登録請求項1</td><td>正しい入力用語を音声データへ変換し、その音声を解析して得た異なる解析語を誤変換語として対応付ける。</td><td>TTS等で専門語から誤認識を生成する骨格が近い。ただし、前後文を変えた複数のTTS音声から誤認識群を収集することまでは確認項に明示されない。</td></tr>
+  </tbody></table>
+  <p class="note">複数ASR、複数回発話、音声合成及び複数誤認識の収集には、それぞれ請求項上の近接例がある。一方、「意味・用例を含む複数の前後文を生成し、各文章をTTS・ASRへ順次入力して、一語の置換用誤認識群を作る」という連結は、上記確認請求項だけからは確認していない。</p>
 </section>
 
 <section>
@@ -236,6 +245,7 @@
     <tr><td><a href="https://patents.google.com/patent/JP2009204732A/ja">JP2009204732A</a></td><td>文書検索によって未知語の読み候補を検証</td></tr>
     <tr><td><a href="https://patents.google.com/patent/JP6869835B2/ja">JP6869835B2</a></td><td>サーバ側表記と端末側の読みを照合して登録</td></tr>
     <tr><td><a href="https://patents.google.com/patent/US20150106100A1/en">US20150106100A1</a></td><td>新語と既存語の音響的混同度及び追加影響を評価</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US7529668B2/en">US7529668B2</a></td><td>複数の発音観測を整列・集約し、妥当性確認後に発音辞書へ追加（登録1・14～18・20・33～37）</td></tr>
     <tr><td><a href="https://patents.justia.com/patent/5754977">US5754977A</a></td><td>新規登録語と既存語の混同を登録時に検出</td></tr>
   </tbody></table>
 
@@ -289,6 +299,8 @@
     <tr><td><a href="https://patents.google.com/patent/US12444402B2/en">US12444402B2</a></td><td>音声埋込みで固有名詞候補を検索し、選択結果を登録</td></tr>
     <tr><td><a href="https://patents.google.com/patent/US9558740B1/en">US9558740B1</a></td><td>曖昧性解消の要否を判定してから候補を選ぶ二段処理</td></tr>
     <tr><td><a href="https://patents.google.com/patent/US8600760B2/en">US8600760B2</a></td><td>n-best第一候補が混同しやすい場合に第二候補を採用</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5148671B2/ja">JP5148671B2</a></td><td>複数方式又は複数回の認識結果の差分から誤認識部分を抽出（登録5）</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US6122613A/en">US6122613A</a></td><td>同一音声を複数の認識器で処理し結果を統合（請求項1～4）</td></tr>
     <tr><td><a href="https://patents.google.com/patent/US12633290B2/en">US12633290B2</a></td><td>音素候補と分野・利用者意図による認識文の順位付け</td></tr>
     <tr><td><a href="https://patents.google.com/patent/JP7322782B2/ja">JP7322782B2</a></td><td>音声住所の同音誤変換を地域情報で補正</td></tr>
     <tr><td><a href="https://patents.google.com/patent/JP6233867B2/ja">JP6233867B2</a></td><td>付加情報に一致する語の認識確率を優先</td></tr>
