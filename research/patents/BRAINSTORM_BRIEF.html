@@ -23,6 +23,13 @@
 
 <section>
   <h2>1．背景技術</h2>
+  <p>音声認識モデルを専門分野へ対応させる方法は、モデルを更新する方法と、モデルを更新せず認識結果を修正する方法に大別できる。さらに後者には、辞書による機械的な置換と、LLMによる文脈補正がある。</p>
+  <table><thead><tr><th>方式</th><th>利点</th><th>課題</th></tr></thead><tbody>
+    <tr><td>音声認識モデルのFT</td><td>専門語の音響・言語的特徴をモデル自体へ反映できる。推論時に別処理を追加しなくても認識できる可能性がある。</td><td>学習データ、計算資源及び評価が必要で、改善を直ちに反映しにくい。更新によって既存語の精度が低下する可能性もある。</td></tr>
+    <tr><td>辞書・対応表による置換</td><td>再学習を行わず、登録後すぐに反映できる。文字列照合と置換だけなら処理が軽い。</td><td>登録されていない誤りには対応できない。同じ認識誤りに複数の正解語が対応すると、置換先を一意に決められない。</td></tr>
+    <tr><td>LLMによる後段修正</td><td>前後の文章や会話履歴を参照し、同音異義語や曖昧な候補を文脈から選択できる。</td><td>モデル呼出しによる処理時間、計算量及び運用費用が加わる。全発話へ常時適用すると通常時の応答も遅くなる。</td></tr>
+  </tbody></table>
+  <p>本方式は、即時反映できる辞書置換を基本とし、辞書だけでは置換先を決定できない箇所に限ってLLMを使用する。登録時に得た音声及び正解表記は、将来のFTにも利用できるよう保持する。</p>
   <p>音声認識結果に含まれる専門語の誤りを補正する方法として、実際の認識誤りと正しい語彙との対応を辞書に登録し、同じ認識結果が現れた場合に置換する方式がある。</p>
   <div class="example"><span class="term">正しい専門語：</span>最終沈殿池<br><span class="term">認識結果：</span>最終沈殿地<br><span class="term">処理：</span>「最終沈殿地」を検出した場合、「最終沈殿池」へ置換する。</div>
   <figure class="figure">
@@ -45,6 +52,13 @@
       </svg>
     </div>
   </figure>
+  <table><thead><tr><th>従来フローの要素</th><th>先行公報で確認した内容</th></tr></thead><tbody>
+    <tr><td>専門語を発話し、実際の誤認識と正しい語を対応付ける</td><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a>、<a href="https://patents.google.com/patent/JP6718182B1/ja">JP6718182B1</a></td></tr>
+    <tr><td>誤認識語を検出し、登録した正しい語へ置換する</td><td><a href="https://patents.google.com/patent/JP2018045001A/ja">JP2018045001A</a>、<a href="https://patents.google.com/patent/JP2025514770A/en">JP2025514770A</a></td></tr>
+    <tr><td>一つの置換元が複数の変換先と競合する</td><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a>、<a href="https://patents.google.com/patent/US20090254819A1/en">US20090254819A1</a></td></tr>
+    <tr><td>文脈又はLLMにより認識候補を再評価する</td><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a>、<a href="https://patents.google.com/patent/JP2025135075A/en">JP2025135075A</a></td></tr>
+  </tbody></table>
+  <p class="note">したがって、図1の各要素自体を新規点とはしにくい。本方式では、誤り候補の重複を判定し、一意の場合は軽量な直接置換、重複時だけLLM補正へ切り替える連結を中心に検討する。</p>
   <p>一方、同じ専門語であっても、使用するASR、話者、発話速度、前後の文章又はデコード条件によって認識誤りが変化する。そのため、複数のASRによる認識、複数回の発話、又は専門語を含む複数の文章をTTSで生成して再認識することにより、一つの専門語に対して複数の認識誤りを収集する方式が考えられる。</p>
 </section>
 
@@ -135,12 +149,17 @@
 </section>
 
 <section>
-  <h2>4．登録情報</h2>
+  <h2>4．保持する情報</h2>
+  <h3>4.1　利用者が一語ごとに登録する情報</h3>
   <dl class="definition">
     <dt>正しい表記</dt><dd>利用者が登録した専門語の文字列</dd>
     <dt>登録音声・発音</dt><dd>利用者が専門語を発音した音声、読み又は音素情報</dd>
     <dt>意味・用例</dt><dd>専門語の意味、使用対象、使用場面及び当該専門語を含む例文</dd>
-    <dt>認識誤り群</dt><dd>複数ASR、複数文脈、複数発話又はTTS再認識によって得た文字列</dd>
+  </dl>
+  <h3>4.2　システムが内部で生成・保持する情報</h3>
+  <dl class="definition">
+    <dt>認識誤り群</dt><dd>複数ASR、前後文を変更した発話又はTTS再認識によってシステムが取得した文字列</dd>
+    <dt>対応関係</dt><dd>各認識誤りと、置換先候補となる一又は複数の専門語との対応</dd>
   </dl>
 </section>
 
@@ -200,9 +219,94 @@
   </ul>
 </section>
 
-<div class="links">
-  <p>詳細資料：<a href="BRAINSTORM_BRIEF.md">統合メモ</a>　<a href="PRIOR_ART_INDEX.md">近接先行技術索引</a>　<a href="HANDOFF.md">引き継ぎ資料</a></p>
-  <p>本資料はブレスト及び調査整理を目的とする。出願可否、権利範囲又は他社権利の実施可否を確定する法的意見ではない。</p>
-</div>
+<section>
+  <h2>10．調査済み特許の体系的一覧</h2>
+  <h3>10.1　専門語登録、辞書及び誤認識対応表</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP5366169B2/ja">JP5366169B2</a></td><td>訂正語に対応する音声区間の音素列を取得して語彙へ登録</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6718182B1/ja">JP6718182B1</a></td><td>入力語を音声化して得た誤解析語と正しい語を対応付け</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A／US20220270595A1</a></td><td>専門語の実発話からASR誤認識語との対応表を作成</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2018045001A/ja">JP2018045001A</a></td><td>話題ごとの誤認識置換表と適用閾値</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a></td><td>同一の類似語に複数変換先が対応する競合を優先度で解消</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP4816409B2/ja">JP4816409B2</a></td><td>音素分類及び頻度を用いた呼称登録</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2009204732A/ja">JP2009204732A</a></td><td>文書検索によって未知語の読み候補を検証</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6869835B2/ja">JP6869835B2</a></td><td>サーバ側表記と端末側の読みを照合して登録</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20150106100A1/en">US20150106100A1</a></td><td>新語と既存語の音響的混同度及び追加影響を評価</td></tr>
+    <tr><td><a href="https://patents.justia.com/patent/5754977">US5754977A</a></td><td>新規登録語と既存語の混同を登録時に検出</td></tr>
+  </tbody></table>
+
+  <h3>10.2　訂正対話、訂正位置及び音素照合</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP4604178B2/ja">JP4604178B2</a></td><td>対話による訂正候補の選択、保存及び適応</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP3718088B2/ja">JP3718088B2</a></td><td>訂正用音声から候補を生成・選択し辞書を更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP4270770B2/ja">JP4270770B2</a></td><td>元発話と訂正再発話を音響的に対応付けて置換</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP4537755B2/ja">JP4537755B2</a></td><td>対話履歴から訂正発話を検出し直前発話を修正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2001306091A/ja">JP2001306091A</a></td><td>訂正再発話と元発話内の対象区間を対応付け</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/WO2003025904A1/en">WO2003025904A1</a></td><td>訂正語の音素列から認識結果内の訂正位置を特定</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20050203751A1/en">US20050203751A1</a></td><td>未知語訂正、音素アラインメント及び語彙追加</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US9514743B2/en">US9514743B2</a></td><td>訂正要求発話を検出して訂正候補を生成</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20210005204A1/en">US20210005204A1</a></td><td>誤認識・正解の音素列履歴を用いた候補検索</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20210043196A1/en">US20210043196A1</a></td><td>音素記号列を辞書内の語へ置換</td></tr>
+  </tbody></table>
+
+  <h3>10.3　訂正履歴、LLM及び個人化された後補正</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP7771015B2/ja">JP7771015B2</a></td><td>修正前後、話題及び時刻の履歴を用いる後段訂正モデル更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2025135075A/en">JP2025135075A</a></td><td>利用者固有語彙と認識結果をLLMへ与える後補正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2008243080A/ja">JP2008243080A</a></td><td>類似用例、音韻及び意味属性を用いる認識訂正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US10522133B2/en">US10522133B2</a></td><td>過去の誤認識・訂正履歴に基づく自動訂正又は警告</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US9858038B2/en">US9858038B2</a></td><td>個人又は集約利用者の置換データによる訂正候補</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20210142789A1/en">US20210142789A1</a></td><td>低信頼領域を文脈、音韻又は埋込みに基づいて置換</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a></td><td>訂正ログ、個人情報及びアプリ文脈による候補再順位付け</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20230402034A1/en">US20230402034A1</a></td><td>過去の利用者訂正を代替認識仮説へ反映</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US12444412B2/en">US12444412B2</a></td><td>LLM、検索及びユーザー入力を用いるASRエンティティ訂正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20260011325A1/en">US20260011325A1</a></td><td>ASR仮説と文脈リストによる後段スペル訂正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/WO2006113350A2/en">WO2006113350A2</a></td><td>ASR出力と最終編集文書の対による後段訂正モデル適応</td></tr>
+  </tbody></table>
+
+  <h3>10.4　意味質問、同音異義語及び自然言語説明</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/US20250335933A1/en">US20250335933A1</a></td><td>不明語の定義を質問・保存し、競合する定義を文脈で区別</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US10621285B2/en">US10621285B2／US20200034423A1</a></td><td>語義を質問して意味表現及び知識を更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7178995B2/ja">JP7178995B2</a></td><td>質問による知識更新と後続対話での利用</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JPH075891A/ja">JPH075891A／JP3397372B2</a></td><td>質問回答で認識語彙を変更し元音声を再評価</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2013250931A/ja">JP2013250931A</a></td><td>意味不明な認識語について他利用者へ質問し回答を取得</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2002287787A/ja">JP2002287787A</a></td><td>同音異義文字を説明語、語句及び文脈キューで選択</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5622566B2/ja">JP5622566B2</a></td><td>発声による文字指定、訂正及びレキシコン更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5819924B2/ja">JP5819924B2</a></td><td>日本語の単語内文字による訂正時の語彙構築</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JPWO2014041607A1/en">JPWO2014041607A1</a></td><td>同音・異表記候補を表示し利用者選択で置換</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP3710157B2/ja">JP3710157B2</a></td><td>読みと漢字構成要素を併用して語句を入力</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20260065907A1/en">US20260065907A1</a></td><td>発音、構造、文脈及び意味の自然言語説明を用いるLLM訂正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/CN115019787B/en">CN115019787B</a></td><td>拮抗する同音候補を説明語彙及び言語モデルで選択</td></tr>
+  </tbody></table>
+
+  <h3>10.5　音響検索、候補選択及び利用者文脈</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/US12444402B2/en">US12444402B2</a></td><td>音声埋込みで固有名詞候補を検索し、選択結果を登録</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US9558740B1/en">US9558740B1</a></td><td>曖昧性解消の要否を判定してから候補を選ぶ二段処理</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8600760B2/en">US8600760B2</a></td><td>n-best第一候補が混同しやすい場合に第二候補を採用</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US12633290B2/en">US12633290B2</a></td><td>音素候補と分野・利用者意図による認識文の順位付け</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7322782B2/ja">JP7322782B2</a></td><td>音声住所の同音誤変換を地域情報で補正</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6233867B2/ja">JP6233867B2</a></td><td>付加情報に一致する語の認識確率を優先</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8204739B2/en">US8204739B2</a></td><td>利用者コミュニティの訂正・新語共有及び確率調整</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8532994B2/en">US8532994B2</a></td><td>本人又はソーシャルグラフ由来の語彙で認識を個人化</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6488588B2/ja">JP6488588B2</a></td><td>ソーシャルグラフのデータを連絡先語彙へ利用</td></tr>
+  </tbody></table>
+
+  <h3>10.6　学習データ、モデル更新及び評価</h3>
+  <table><thead><tr><th>文献</th><th>確認した内容</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP4657736B2/ja">JP4657736B2／US8019602B2</a></td><td>文字変更が訂正か編集かを推論し選択的に学習</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7146038B2/ja">JP7146038B2</a></td><td>複数の書き起こしと事後確率を用いるモデル更新</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7104247B2/ja">JP7104247B2</a></td><td>登録文字を合成音声化して認識モデル更新へ使用</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7858433B2/ja">JP7858433B2</a></td><td>疑似認識で誤りやすい表現を抽出し学習コーパスを選択</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP2012108429A/ja">JP2012108429A</a></td><td>認識器間の一致度等で学習対象音声を選別</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP6526608B2/ja">JP6526608B2</a></td><td>語彙登録前後の変化例を表示して副作用を評価</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP5921601B2/ja">JP5921601B2</a></td><td>過去に除外した候補を次回の候補集合から除外</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/WO2023113422A1/en">WO2023113422A1</a></td><td>検証失敗時に適応前モデルへ切替え又はリセット</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8280733B2/en">US8280733B2</a></td><td>訂正か意図変更かを分類し、選択的に語彙へ追加</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US8977547B2/en">US8977547B2</a></td><td>複数発話の安定性に基づいて登録可否又は再発話を制御</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20190035385A1/en">US20190035385A1</a></td><td>正誤入力、訂正、n-best候補及び訂正結果による学習</td></tr>
+  </tbody></table>
+</section>
 </main></body>
 </html>
