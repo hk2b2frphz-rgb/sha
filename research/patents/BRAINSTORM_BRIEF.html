@@ -7,6 +7,7 @@
 <style>
 :root{--ink:#111;--muted:#555;--line:#aaa;--light:#f4f4f4;--problem:#fff8e8}
 *{box-sizing:border-box}body{margin:0;color:var(--ink);background:#fff;font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif;font-size:15px;line-height:1.8}main{max-width:980px;margin:0 auto;padding:48px 52px 72px}h1{margin:0 0 10px;font-size:30px;line-height:1.45;font-weight:600}h2{margin:42px 0 14px;padding-bottom:5px;border-bottom:1px solid var(--ink);font-size:20px}h3{margin:24px 0 8px;font-size:16px}p{margin:0 0 12px}.meta{color:var(--muted);font-size:12px}.abstract{margin:30px 0;padding:18px 22px;border:1px solid var(--line)}.abstract strong{display:block;margin-bottom:6px}.term{font-weight:600}.example{margin:16px 0;padding:12px 18px;background:var(--light)}.problem{margin:18px 0;padding:14px 18px;background:var(--problem);border-left:3px solid #8a6314}.figure{margin:24px 0 30px}.figure-title{margin-bottom:12px;text-align:center;font-weight:600}.flow{display:flex;align-items:stretch;justify-content:center;gap:28px}.node{position:relative;display:flex;align-items:center;justify-content:center;min-height:74px;padding:12px 14px;border:1px solid var(--ink);text-align:center;line-height:1.5;flex:1}.node:not(:last-child)::after{content:"→";position:absolute;right:-23px;top:50%;transform:translateY(-50%);font-family:sans-serif;font-size:18px}.node.data{border-radius:24px}.node.process{background:var(--light)}.branch{margin:0 auto;max-width:720px}.branch-head{width:280px;margin:0 auto;padding:13px;border:1px solid var(--ink);text-align:center;background:var(--light)}.branch-line{height:24px;margin:auto;border-left:1px solid var(--ink)}.branch-options{display:grid;grid-template-columns:1fr 1fr;gap:70px;position:relative}.branch-options::before{content:"";position:absolute;top:0;left:25%;right:25%;border-top:1px solid var(--ink)}.branch-option{position:relative;padding-top:22px}.branch-option::before{content:"";position:absolute;top:0;left:50%;height:22px;border-left:1px solid var(--ink)}.branch-label{text-align:center;font-size:12px}.branch-box{min-height:108px;padding:14px;border:1px solid var(--ink)}.branch-box strong{display:block;margin-bottom:5px}.caption{margin-top:9px;color:var(--muted);font-size:12px;text-align:center}.definition{display:grid;grid-template-columns:180px 1fr;border-top:1px solid var(--line)}.definition dt,.definition dd{margin:0;padding:9px 10px;border-bottom:1px solid var(--line)}.definition dt{font-weight:600;background:var(--light)}table{width:100%;border-collapse:collapse;font-family:"Noto Sans JP","Yu Gothic",sans-serif;font-size:12px;line-height:1.55}th,td{padding:9px 8px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--light);font-weight:600}ol,ul{margin:8px 0 14px;padding-left:24px}li{margin:5px 0}.claim{padding:16px 20px;border:1px solid var(--ink)}.claim ol{margin-bottom:0}.note{color:var(--muted);font-size:12px}.links{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:12px}a{color:#124b91}@media(max-width:720px){main{padding:28px 18px 50px}.flow{flex-direction:column;gap:24px}.node:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-25px;transform:translateX(-50%)}.branch-options{gap:14px}.definition{grid-template-columns:120px 1fr}h1{font-size:24px}}@media print{main{max-width:none;padding:18mm}a{color:inherit;text-decoration:none}.figure{break-inside:avoid}h2{break-after:avoid}}
+.diagram-wrap{width:100%;overflow-x:auto}.diagram{display:block;width:100%;height:auto;min-width:720px}.diagram .box{fill:#fff;stroke:#111;stroke-width:1.4}.diagram .process{fill:#f4f4f4}.diagram .decision{fill:#fff;stroke:#111;stroke-width:1.4}.diagram .connector{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow)}.diagram text{fill:#111;font-family:"Noto Sans JP","Yu Gothic",sans-serif;font-size:14px;text-anchor:middle}.diagram .label{font-size:12px}.diagram .strong{font-weight:600}@media(max-width:720px){.diagram{min-width:680px}}
 </style>
 </head>
 <body><main>
@@ -39,11 +40,23 @@
   <p>専門語を登録する際は、正しい表記及び発音に加えて、当該専門語の意味と用例を同時に登録する。意味・用例は、後に誤認識候補が別の登録語と重複した場合の文脈判断に用いる。</p>
   <figure class="figure">
     <div class="figure-title">図1　辞書登録処理</div>
-    <div class="flow">
-      <div class="node data">正しい表記・発音<br>意味・用例を登録</div>
-      <div class="node process">複数ASR、複数文脈、<br>TTS等で認識を実行</div>
-      <div class="node">複数の認識誤りを<br>収集・正規化</div>
-      <div class="node data">専門語と認識誤り群を<br>対応付けて保存</div>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 190" role="img" aria-labelledby="fig1-title fig1-desc">
+        <title id="fig1-title">辞書登録処理のフローチャート</title>
+        <desc id="fig1-desc">正しい表記、発音、意味、用例を登録し、複数の認識条件で誤りを生成し、収集と正規化を経て専門語へ対応付けて保存する。</desc>
+        <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <rect class="box" x="20" y="55" width="180" height="80" rx="2"/>
+        <text x="110" y="82"><tspan class="strong" x="110">専門語を登録</tspan><tspan x="110" dy="22">表記・発音</tspan><tspan x="110" dy="20">意味・用例</tspan></text>
+        <path class="connector" d="M200 95 H245"/>
+        <rect class="box process" x="245" y="55" width="180" height="80" rx="2"/>
+        <text x="335" y="84"><tspan class="strong" x="335">認識を実行</tspan><tspan x="335" dy="22">複数ASR・複数文脈</tspan><tspan x="335" dy="20">TTS再認識等</tspan></text>
+        <path class="connector" d="M425 95 H470"/>
+        <rect class="box" x="470" y="55" width="180" height="80" rx="2"/>
+        <text x="560" y="86"><tspan class="strong" x="560">認識誤り群</tspan><tspan x="560" dy="23">収集・正規化</tspan></text>
+        <path class="connector" d="M650 95 H695"/>
+        <rect class="box" x="695" y="55" width="185" height="80" rx="2"/>
+        <text x="787.5" y="84"><tspan class="strong" x="787.5">辞書へ保存</tspan><tspan x="787.5" dy="22">専門語情報と</tspan><tspan x="787.5" dy="20">認識誤り群を対応付け</tspan></text>
+      </svg>
     </div>
     <figcaption class="caption">意味・用例は、競合発生後に追加するのではなく、専門語の登録時に保存する。</figcaption>
   </figure>
@@ -52,18 +65,32 @@
   <p>認識結果が登録済みの誤り候補と一致した場合、その誤り候補に対応する登録語の数を判定する。対応する登録語が一つの場合は直接置換し、複数の場合に限って文脈補正を実行する。</p>
   <figure class="figure">
     <div class="figure-title">図2　認識時の補正処理</div>
-    <div class="flow" style="margin-bottom:24px">
-      <div class="node data">音声入力</div>
-      <div class="node process">ASRによる認識</div>
-      <div class="node">登録済みの<br>認識誤りを検出</div>
-      <div class="node process">対応する登録語の<br>数を判定</div>
-    </div>
-    <div class="branch">
-      <div class="branch-head">置換先は一意か</div><div class="branch-line"></div>
-      <div class="branch-options">
-        <div class="branch-option"><div class="branch-label">一意</div><div class="branch-box"><strong>直接置換</strong>対応する専門語へ辞書的に置換する。LLMは起動しない。</div></div>
-        <div class="branch-option"><div class="branch-label">複数候補</div><div class="branch-box"><strong>文脈補正</strong>前後文、会話履歴、各候補の意味・用例をLLMへ入力し、置換先を決定する。</div></div>
-      </div>
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 520" role="img" aria-labelledby="fig2-title fig2-desc">
+        <title id="fig2-title">認識時の補正処理のフローチャート</title>
+        <desc id="fig2-desc">音声認識後に登録済み誤りと照合し、対応する登録語が一意なら直接置換し、複数なら意味、用例、文脈を使うLLM補正へ分岐する。</desc>
+        <defs><marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <style>.flowline{fill:none;stroke:#111;stroke-width:1.5;marker-end:url(#arrow2)}</style>
+        <rect class="box" x="355" y="15" width="190" height="55" rx="27.5"/>
+        <text x="450" y="48"><tspan class="strong">音声入力</tspan></text>
+        <path class="flowline" d="M450 70 V100"/>
+        <rect class="box process" x="330" y="100" width="240" height="60" rx="2"/>
+        <text x="450" y="136"><tspan class="strong">ASRによる認識</tspan></text>
+        <path class="flowline" d="M450 160 V190"/>
+        <rect class="box" x="315" y="190" width="270" height="65" rx="2"/>
+        <text x="450" y="216"><tspan class="strong">登録済みの認識誤りと照合</tspan><tspan x="450" dy="22">対応する登録語を取得</tspan></text>
+        <path class="flowline" d="M450 255 V285"/>
+        <polygon class="decision" points="450,285 590,350 450,415 310,350"/>
+        <text x="450" y="344"><tspan class="strong">対応する登録語は</tspan><tspan x="450" dy="22">一つか</tspan></text>
+        <path class="flowline" d="M310 350 H175 V445"/>
+        <text class="label" x="242" y="338">一意</text>
+        <rect class="box" x="45" y="445" width="260" height="65" rx="2"/>
+        <text x="175" y="472"><tspan class="strong">直接置換</tspan><tspan x="175" dy="22">LLMは起動しない</tspan></text>
+        <path class="flowline" d="M590 350 H725 V445"/>
+        <text class="label" x="658" y="338">複数候補</text>
+        <rect class="box process" x="595" y="445" width="260" height="65" rx="2"/>
+        <text x="725" y="465"><tspan class="strong">LLMによる文脈補正</tspan><tspan x="725" dy="20">前後文・会話履歴</tspan><tspan x="725" dy="19">候補ごとの意味・用例</tspan></text>
+      </svg>
     </div>
     <figcaption class="caption">誤り候補が重複した箇所のみLLMへ送るため、通常の認識処理には追加遅延を生じさせない。</figcaption>
   </figure>
