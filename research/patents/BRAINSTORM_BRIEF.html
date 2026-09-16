@@ -3,83 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>専門用語に適応する音声認識システム｜特許ブレスト</title>
+<title>専門用語の認識誤りに対する選択的文脈補正方式</title>
 <style>
-:root{--ink:#18202a;--muted:#66717d;--line:#dfe3e8;--soft:#f5f6f7;--accent:#2458a6;--warm:#f8f4ea}
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#fff;color:var(--ink);font-family:"Noto Sans JP","Yu Gothic",system-ui,sans-serif;font-size:15px;line-height:1.85}
-a{color:var(--accent)}main{max-width:1040px;margin:auto;padding:52px 42px 80px}.eyebrow{margin:0 0 12px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em}h1{max-width:820px;margin:0;font-size:clamp(32px,4.2vw,58px);line-height:1.22;letter-spacing:-.035em}h2{margin:0 0 20px;font-size:25px;line-height:1.4}h3{margin:0 0 10px;font-size:17px}p{margin:0 0 15px}.lead{max-width:850px;margin-top:24px;color:#44505d;font-size:18px}.meta{margin-top:28px;color:var(--muted);font-size:13px}.rule{height:1px;background:var(--line);margin:45px 0}.columns{display:grid;grid-template-columns:1fr 1fr;gap:56px}.section{margin-top:58px}.intro{max-width:820px}.story{max-width:850px;margin:32px auto 0}.chapter{position:relative;padding:0 0 38px 88px}.chapter:not(:last-child)::before{content:"";position:absolute;left:27px;top:38px;bottom:0;border-left:1px solid #aeb6c0}.chapter:not(:last-child)::after{content:"↓";position:absolute;left:20px;bottom:6px;color:#7a8591}.chapter-number{position:absolute;left:0;top:0;width:56px;height:56px;border:1px solid #aeb6c0;border-radius:50%;display:grid;place-items:center;color:#5b6672;font-size:12px;font-weight:700}.chapter.problem{padding-top:20px;padding-bottom:58px;background:linear-gradient(90deg,var(--warm),transparent 78%)}.chapter.problem .chapter-number{top:20px;border-color:#a66a13;color:#8b5c13;background:#fff}.chapter.solution{padding-top:22px;padding-bottom:28px;background:linear-gradient(90deg,#eef3fb,transparent 78%)}.chapter.solution .chapter-number{top:22px;border-color:var(--accent);color:var(--accent);background:#fff}.chapter h3{font-size:20px}.chapter-label{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em}.chapter.problem .chapter-label{color:#8b5c13}.chapter.solution .chapter-label{color:var(--accent)}.decision{margin:20px 0 0;padding:18px 22px;border-left:3px solid var(--accent);background:#fff}.caption{color:var(--muted);font-size:12px}.two-flow{display:grid;grid-template-columns:1fr;gap:18px}.lane{padding:24px 28px;border:1px solid var(--line)}.lane ol{margin:12px 0 0;padding-left:21px}.lane li{margin:7px 0}.note{margin-top:18px;padding:18px 22px;background:var(--warm)}.note strong{display:block;margin-bottom:5px}.compact-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}.compact-grid article{background:#fff;padding:20px}.compact-grid p{color:#4c5662;font-size:13px}.comparison{width:100%;border-collapse:collapse;font-size:13px}.comparison th,.comparison td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.comparison th{color:var(--muted);font-size:11px;letter-spacing:.05em}.comparison td:first-child{font-weight:700;white-space:nowrap}.status{display:inline-block;padding:1px 8px;border:1px solid #b5bdc7;border-radius:99px;color:#4b5662;font-size:11px}.status.main{border-color:var(--accent);color:var(--accent)}.patents{columns:2;column-gap:50px}.patent-group{break-inside:avoid;margin-bottom:25px}.patent-group h3{padding-bottom:6px;border-bottom:1px solid var(--line)}.patent-group p{margin:6px 0;color:#4c5662;font-size:13px}.footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}@media(max-width:850px){main{padding:34px 22px 60px}.columns{grid-template-columns:1fr;gap:26px}.compact-grid{grid-template-columns:1fr 1fr}.patents{columns:1}}@media(max-width:520px){.chapter{padding-left:68px}.chapter-number{width:46px;height:46px}.chapter:not(:last-child)::before{left:22px}.chapter:not(:last-child)::after{left:15px}.compact-grid{grid-template-columns:1fr}.comparison td:first-child{white-space:normal}}
+:root{--ink:#111;--muted:#555;--line:#aaa;--light:#f4f4f4;--problem:#fff8e8}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);background:#fff;font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif;font-size:15px;line-height:1.8}main{max-width:980px;margin:0 auto;padding:48px 52px 72px}h1{margin:0 0 10px;font-size:30px;line-height:1.45;font-weight:600}h2{margin:42px 0 14px;padding-bottom:5px;border-bottom:1px solid var(--ink);font-size:20px}h3{margin:24px 0 8px;font-size:16px}p{margin:0 0 12px}.meta{color:var(--muted);font-size:12px}.abstract{margin:30px 0;padding:18px 22px;border:1px solid var(--line)}.abstract strong{display:block;margin-bottom:6px}.term{font-weight:600}.example{margin:16px 0;padding:12px 18px;background:var(--light)}.problem{margin:18px 0;padding:14px 18px;background:var(--problem);border-left:3px solid #8a6314}.figure{margin:24px 0 30px}.figure-title{margin-bottom:12px;text-align:center;font-weight:600}.flow{display:flex;align-items:stretch;justify-content:center;gap:28px}.node{position:relative;display:flex;align-items:center;justify-content:center;min-height:74px;padding:12px 14px;border:1px solid var(--ink);text-align:center;line-height:1.5;flex:1}.node:not(:last-child)::after{content:"→";position:absolute;right:-23px;top:50%;transform:translateY(-50%);font-family:sans-serif;font-size:18px}.node.data{border-radius:24px}.node.process{background:var(--light)}.branch{margin:0 auto;max-width:720px}.branch-head{width:280px;margin:0 auto;padding:13px;border:1px solid var(--ink);text-align:center;background:var(--light)}.branch-line{height:24px;margin:auto;border-left:1px solid var(--ink)}.branch-options{display:grid;grid-template-columns:1fr 1fr;gap:70px;position:relative}.branch-options::before{content:"";position:absolute;top:0;left:25%;right:25%;border-top:1px solid var(--ink)}.branch-option{position:relative;padding-top:22px}.branch-option::before{content:"";position:absolute;top:0;left:50%;height:22px;border-left:1px solid var(--ink)}.branch-label{text-align:center;font-size:12px}.branch-box{min-height:108px;padding:14px;border:1px solid var(--ink)}.branch-box strong{display:block;margin-bottom:5px}.caption{margin-top:9px;color:var(--muted);font-size:12px;text-align:center}.definition{display:grid;grid-template-columns:180px 1fr;border-top:1px solid var(--line)}.definition dt,.definition dd{margin:0;padding:9px 10px;border-bottom:1px solid var(--line)}.definition dt{font-weight:600;background:var(--light)}table{width:100%;border-collapse:collapse;font-family:"Noto Sans JP","Yu Gothic",sans-serif;font-size:12px;line-height:1.55}th,td{padding:9px 8px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--light);font-weight:600}ol,ul{margin:8px 0 14px;padding-left:24px}li{margin:5px 0}.claim{padding:16px 20px;border:1px solid var(--ink)}.claim ol{margin-bottom:0}.note{color:var(--muted);font-size:12px}.links{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:12px}a{color:#124b91}@media(max-width:720px){main{padding:28px 18px 50px}.flow{flex-direction:column;gap:24px}.node:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-25px;transform:translateX(-50%)}.branch-options{gap:14px}.definition{grid-template-columns:120px 1fr}h1{font-size:24px}}@media print{main{max-width:none;padding:18mm}a{color:inherit;text-decoration:none}.figure{break-inside:avoid}h2{break-after:avoid}}
 </style>
 </head>
 <body><main>
 <header>
-  <p class="eyebrow">PATENT BRAINSTORM / 2026.09.16</p>
-  <h1>使うほど専門用語に適応する<br>音声認識システム</h1>
-  <p class="lead">利用者による訂正を、その場の文字修正で終わらせない。実際に起きた誤認識と正しい専門語を結び付け、必要な場合だけ意味や用例を聞き、次回以降の認識後補正へ利用する構想。</p>
-  <p class="meta">日本の公報を中心に、海外公報を比較参照。特許性は現時点の調査に基づく暫定評価。</p>
+  <h1>専門用語の認識誤りに対する<br>選択的文脈補正方式</h1>
+  <p class="meta">特許検討資料　｜　2026年9月16日　｜　日本公報を中心に海外公報を比較参照</p>
 </header>
-<div class="rule"></div>
-<section class="intro">
-  <h2>背景</h2>
-  <p>汎用の音声認識モデルは、一般的な言葉には強くても、社内用語、工程名、製品名、略語などには十分対応できない。そこで、利用者が経験した認識誤りと正しい専門語を登録し、同じ誤りが現れた時に置換する方法が使われる。</p>
-  <p>しかし、この方法を誤りの揺れに対応できるよう拡張すると、別の問題が生まれる。本構想は、その問題が生じる過程と解決方法を次の順に整理する。</p>
+
+<div class="abstract">
+  <strong>要旨</strong>
+  専門語ごとに、正しい表記、発音、意味及び用例を登録するとともに、複数の条件で生じる認識誤りを収集する。認識誤りから置換先が一意に定まる場合は直接置換し、複数の登録語が対応する場合に限り、保存した意味・用例と発話文脈を用いる言語モデルによって置換先を決定する。
+</div>
+
+<section>
+  <h2>1．背景技術</h2>
+  <p>音声認識結果に含まれる専門語の誤りを補正する方法として、実際の認識誤りと正しい語彙との対応を辞書に登録し、同じ認識結果が現れた場合に置換する方式がある。</p>
+  <div class="example"><span class="term">正しい専門語：</span>最終沈殿池<br><span class="term">認識結果：</span>最終沈殿地<br><span class="term">処理：</span>「最終沈殿地」を検出した場合、「最終沈殿池」へ置換する。</div>
+  <p>一方、同じ専門語であっても、使用するASR、話者、発話速度、前後の文章又はデコード条件によって認識誤りが変化する。そのため、複数のASRによる認識、複数回の発話、又は専門語を含む複数の文章をTTSで生成して再認識することにより、一つの専門語に対して複数の認識誤りを収集する方式が考えられる。</p>
 </section>
-<section class="section">
-  <h2>既存方式から本方式まで</h2>
-  <div class="story" aria-label="既存方式から本方式までの段階的な説明">
-    <article class="chapter">
-      <div class="chapter-number">01</div><p class="chapter-label">既存方式</p><h3>実際の認識誤りを、正しい専門語へ置換する</h3>
-      <p>利用者が「最終沈殿池」と発話した時に、ASRが「最終沈殿地」と認識したとする。この対応を記録し、次に同じ認識結果が出た時は「最終沈殿池」へ置換する。</p>
-    </article>
-    <article class="chapter">
-      <div class="chapter-number">02</div><p class="chapter-label">既存方式の拡張</p><h3>複数の誤認識候補を作り、誤りの揺れを吸収する</h3>
-      <p>同じ専門語でも、ASRモデル、話者、前後の文章、デコード条件によって誤り方が変わる。複数のASRで認識させたり、専門語を含む文章をTTSで生成して再認識させたりして、複数の誤認識候補を一つの正しい専門語へ対応付ける。</p>
-    </article>
-    <article class="chapter problem">
-      <div class="chapter-number">03</div><p class="chapter-label">ここで生じる課題</p><h3>登録語が増えると、誤認識候補が別の登録語と重複する</h3>
-      <p>登録する専門語と誤認識候補が増えるほど、一つの認識結果が複数の正しい専門語に対応する可能性が高くなる。同音異義語でも同じ問題が起きる。この状態で固定置換すると、一方を正しくする代わりに、もう一方の発話を誤って書き換えてしまう。</p>
-    </article>
-    <article class="chapter solution">
-      <div class="chapter-number">04</div><p class="chapter-label">本方式による解決</p><h3>置換先の重複を検出し、重複した箇所だけ文脈補正へ切り替える</h3>
-      <p>認識結果に対応する登録語が一つなら、従来どおり高速に直接置換する。複数の登録語が対応する場合は固定置換を行わず、その箇所の前後文、会話履歴、候補情報をLLMへ与えて適切な専門語を選ぶ。</p>
-      <div class="decision"><strong>一意に決まる認識誤り</strong> → 直接置換<br><strong>複数の登録語に重複する認識誤り</strong> → その箇所だけLLMによる文脈補正</div>
-      <p class="caption">LLMを常時動かさないため、衝突しない通常の推論では追加遅延を生じさせない。</p>
-    </article>
+
+<section>
+  <h2>2．従来方式を拡張した場合の課題</h2>
+  <p>専門語ごとに複数の認識誤りを登録すれば、認識誤りの揺れを広く吸収できる。しかし、登録語と認識誤りの数が増えるほど、同じ認識結果が異なる登録語の誤り候補として重複する可能性が高くなる。同音異義語の場合にも同様の重複が生じる。</p>
+  <div class="problem"><strong>課題：</strong>一つの認識結果が複数の登録語に対応すると、固定置換では置換先を決定できない。一方、全ての認識結果を常時LLMで補正すると、通常の推論にも処理時間及び計算量が加わる。</div>
+</section>
+
+<section>
+  <h2>3．提案方式</h2>
+  <h3>3.1　辞書登録処理</h3>
+  <p>専門語を登録する際は、正しい表記及び発音に加えて、当該専門語の意味と用例を同時に登録する。意味・用例は、後に誤認識候補が別の登録語と重複した場合の文脈判断に用いる。</p>
+  <figure class="figure">
+    <div class="figure-title">図1　辞書登録処理</div>
+    <div class="flow">
+      <div class="node data">正しい表記・発音<br>意味・用例を登録</div>
+      <div class="node process">複数ASR、複数文脈、<br>TTS等で認識を実行</div>
+      <div class="node">複数の認識誤りを<br>収集・正規化</div>
+      <div class="node data">専門語と認識誤り群を<br>対応付けて保存</div>
+    </div>
+    <figcaption class="caption">意味・用例は、競合発生後に追加するのではなく、専門語の登録時に保存する。</figcaption>
+  </figure>
+
+  <h3>3.2　認識時の補正処理</h3>
+  <p>認識結果が登録済みの誤り候補と一致した場合、その誤り候補に対応する登録語の数を判定する。対応する登録語が一つの場合は直接置換し、複数の場合に限って文脈補正を実行する。</p>
+  <figure class="figure">
+    <div class="figure-title">図2　認識時の補正処理</div>
+    <div class="flow" style="margin-bottom:24px">
+      <div class="node data">音声入力</div>
+      <div class="node process">ASRによる認識</div>
+      <div class="node">登録済みの<br>認識誤りを検出</div>
+      <div class="node process">対応する登録語の<br>数を判定</div>
+    </div>
+    <div class="branch">
+      <div class="branch-head">置換先は一意か</div><div class="branch-line"></div>
+      <div class="branch-options">
+        <div class="branch-option"><div class="branch-label">一意</div><div class="branch-box"><strong>直接置換</strong>対応する専門語へ辞書的に置換する。LLMは起動しない。</div></div>
+        <div class="branch-option"><div class="branch-label">複数候補</div><div class="branch-box"><strong>文脈補正</strong>前後文、会話履歴、各候補の意味・用例をLLMへ入力し、置換先を決定する。</div></div>
+      </div>
+    </div>
+    <figcaption class="caption">誤り候補が重複した箇所のみLLMへ送るため、通常の認識処理には追加遅延を生じさせない。</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>4．登録情報</h2>
+  <dl class="definition">
+    <dt>専門語情報</dt><dd>正しい表記、読み又は発音、意味、用例、必要に応じて分野・部署等</dd>
+    <dt>認識誤り群</dt><dd>複数ASR、複数文脈、複数発話又はTTS再認識によって得た文字列</dd>
+    <dt>生成条件</dt><dd>使用したASR、文脈、デコード条件、生成日時等</dd>
+    <dt>競合情報</dt><dd>同じ認識誤りに対応する複数の専門語及び各専門語の意味・用例への参照</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>5．技術的効果</h2>
+  <ol>
+    <li>一つの専門語に対する認識誤りの揺れを、複数の誤り候補によって吸収できる。</li>
+    <li>誤り候補が複数の登録語に重複した場合、固定置換による誤修正を抑制できる。</li>
+    <li>意味及び用例を登録時に保存するため、競合発生時に候補ごとの使用文脈を比較できる。</li>
+    <li>置換先が一意の場合はLLMを起動しないため、通常の推論速度を維持できる。</li>
+    <li>辞書の更新はモデル再学習を必要とせず、登録内容を直ちに後段補正へ反映できる。</li>
+  </ol>
+</section>
+
+<section>
+  <h2>6．発明の中心候補</h2>
+  <div class="claim">
+    <ol>
+      <li>専門語の表記、発音、意味及び用例を登録する。</li>
+      <li>複数の認識条件を用いて、当該専門語に対応する複数の認識誤りを取得する。</li>
+      <li>取得した認識誤りを当該専門語に対応付けて記憶する。</li>
+      <li>後続する音声の認識結果に含まれる認識誤りに対応する登録語の数を判定する。</li>
+      <li>登録語が一つの場合は直接置換し、複数の場合は、各登録語の意味・用例及び発話文脈を用いて置換先を決定する。</li>
+    </ol>
   </div>
+  <p class="note">上記は検討用の骨格であり、請求項の確定文案ではない。特許性の中心は、誤り候補の生成自体ではなく、候補の重複を検出し、直接置換と文脈補正を選択的に切り替える連結に置く。</p>
 </section>
-<section class="section two-flow">
-  <div class="lane"><h2>登録時</h2><ol><li>利用者から正しい表記と発話を受け取る。</li><li>対象ASRによる実際の認識結果を、置換検索のキーとして保存する。</li><li>同じキーに別の正解語がある場合、候補を上書きせず競合として保持する。</li><li>競合する語の意味、対象、状態、操作、短い用例などを利用者に尋ね、候補ごとに保存する。</li></ol></div>
-  <div class="lane"><h2>利用時</h2><ol><li>通常のASR結果から、過去に登録された誤認識を検索する。</li><li>置換候補が一つなら、軽量な規則で処理する。</li><li>複数候補がある場合だけ、周辺文、会話履歴、候補別の説明を後段モデルへ渡す。</li><li>専門語候補または元の認識結果を選び、該当箇所だけを補正する。</li></ol></div>
+
+<section>
+  <h2>7．特許性の暫定評価</h2>
+  <p>認識誤りと正しい語の対応付け、複数条件による誤り候補生成、複数候補の文脈選択、LLMによる後補正には、それぞれ近接する先行技術が存在する。したがって、個別要素だけでなく、次の因果関係を一体として示す必要がある。</p>
+  <p><strong>誤り揺れを吸収するため候補を増やす → 登録語の増加により誤り候補が重複する → 重複を検出する → 一意な候補は直接置換し、重複候補だけ文脈補正する。</strong></p>
+  <p>現時点では、この全工程を単一文献が開示するとまでは確認していない。ただし、新規性又は進歩性が認められることを確定したものではなく、組合せ容易性を含む追加調査が必要である。</p>
 </section>
-<section class="section">
-  <h2>意味・用例を尋ねるフェーズ</h2>
-  <div class="columns"><div><p>質問の目的は、用語辞典を作ることではなく、競合する候補のどちらを選ぶべきか判断できる情報を得ることにある。したがって「この言葉の意味は何ですか」だけでは、情報が広すぎたり、候補の区別に役立たなかったりする。</p><p>現時点では、候補間の違いを直接尋ねる方式を中心に検討している。</p></div><div class="note"><strong>質問例（暫定）</strong>「この二つの用語は、どの対象・状態・操作の時に使い分けますか。それぞれを使う短い例文も教えてください。」</div></div>
-  <div class="compact-grid" style="margin-top:26px"><article><h3>質問する時点</h3><p>登録時に聞くか、実利用で曖昧性が発生した時に聞くか。利用者負担と情報の具体性を比較する。</p></article><article><h3>聞く内容</h3><p>定義、対象物、工程、状態、禁止される用法、対比例文のうち、候補選択に最も効く項目を検証する。</p></article><article><h3>回答の加工</h3><p>自由回答をそのまま保存するか、構造化・要約して保存するか。誤った一般化を防ぐ仕組みも必要。</p></article></div>
-  <p class="caption" style="margin-top:12px">この質問設計はまだブラッシュアップが必要な部分であり、現時点で最終仕様とはしていない。</p>
-</section>
-<section class="section">
-  <h2>これまで検討した方向</h2>
-  <table class="comparison"><thead><tr><th>方向</th><th>現在の評価</th><th>位置付け</th></tr></thead><tbody>
-    <tr><td>UI上の文字訂正</td><td>訂正結果の保存・再利用には多くの先行例がある</td><td><span class="status">基礎機能</span></td></tr><tr><td>音声による漢字・語の指定</td><td>漢字説明、訂正発話、候補選択に近い技術がある</td><td><span class="status">入力手段</span></td></tr><tr><td>再発話・音素照合・複数ASR</td><td>単独では既知だが、登録内容の信頼性確認には有用</td><td><span class="status">補助技術</span></td></tr><tr><td>音声・個人・部署によるRAG</td><td>検索、個人化、組織文脈には近接技術がある</td><td><span class="status">実施形態</span></td></tr><tr><td>意味や用例の質問</td><td>意味質問・保存自体は近接例がある。競合との連結が重要</td><td><span class="status">構成要素</span></td></tr><tr><td>置換先競合の解消</td><td>実ASRで生じた競合を起点に、説明取得から将来選択まで結ぶ</td><td><span class="status main">現在の主案</span></td></tr>
+
+<section>
+  <h2>8．主な近接特許</h2>
+  <table><thead><tr><th>文献</th><th>確認した技術</th><th>本方式との関係</th></tr></thead><tbody>
+    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a></td><td>専門語の実発話とASRの誤認識語を対応表へ登録</td><td>認識誤りから正しい語への置換が近い</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a></td><td>一つの類似語が複数の変換先に対応する場合、優先度で一つへ割当て</td><td>置換元の競合を直接扱う。本方式は競合時に文脈補正へ切り替える</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20090254819A1/en">US20090254819A1</a></td><td>一つの誤表記に複数の正解を対応付け、文脈統計で選択</td><td>一対多の辞書と文脈選択が近い</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a></td><td>訂正履歴、個人クラス、アプリ文脈による候補の再順位付け</td><td>個人化された二段補正が近い</td></tr>
+    <tr><td><a href="https://patents.google.com/patent/US20250335933A1/en">US20250335933A1</a></td><td>不明語の定義を質問・保存し、競合する定義を文脈で区別</td><td>意味の保存と競合時判断が近い</td></tr>
+    <tr><td><a href="https://patents.justia.com/patent/5754977">US5754977A</a></td><td>登録時に新旧音声パターンの混同を検出</td><td>登録語間の競合検出が近い</td></tr>
   </tbody></table>
 </section>
-<section class="section columns">
-  <div><h2>技術的な合理性</h2><p>固定置換では、同じ誤認識に複数の正解語がある時、どちらかを必ず誤る。候補を保持し、現在の文脈と候補別説明で選択すれば、この構造的な誤りを減らせる可能性がある。</p><p>さらに、競合した場合だけ質問と後段処理を行うため、全ての登録語へ説明を求める方式より利用者負担と処理量を抑えられる。再学習を待たずに改善を反映しつつ、確認済みの登録データは定期的なモデル更新候補として残せる。</p></div>
-  <div><h2>特許性の暫定評価</h2><p>出願候補として深掘りする価値はある。ただし、「複数候補を文脈で選ぶ」「意味を聞いて保存する」という広い表現では進歩性を主張しにくい。</p><p>差分候補は、対象ASRで実際に観測した競合を起点とし、競合の検出に応じて候補間の説明を取得し、その説明を同じ候補集合の将来補正へ限定して利用する一連の処理にある。単一文献が全工程を開示するとは現時点で確認していないが、新規性や登録可能性を確定したものではない。</p></div>
+
+<section>
+  <h2>9．残る検討事項</h2>
+  <ul>
+    <li>意味・用例の入力形式を自由記述とするか、対象・状態・操作等の項目に構造化するか。</li>
+    <li>認識誤りの一致を完全一致とするか、正規化又は音韻類似を含めるか。</li>
+    <li>LLMが置換を確定できない場合に、元の認識結果を維持するか、利用者へ確認するか。</li>
+    <li>複数ASR、TTS及び前後文の変更による誤り候補生成の具体的範囲。</li>
+    <li>候補重複率、補正精度、誤置換率、LLM呼出し率及び遅延による効果検証。</li>
+  </ul>
 </section>
-<section class="section">
-  <h2>近接特許</h2>
-  <table class="comparison"><thead><tr><th>文献</th><th>確認した内容</th><th>主案との関係</th></tr></thead><tbody>
-    <tr><td><a href="https://patents.google.com/patent/JP2022526467A/ja">JP2022526467A</a></td><td>専門語の実発話とASRの誤認識語を対応表へ登録</td><td>実発話からの登録が直接近い。競合時の説明取得と選択は確認箇所で未確認</td></tr><tr><td><a href="https://patents.google.com/patent/JP7414078B2/ja">JP7414078B2</a></td><td>一つの類似語が複数の変換先に対応する時、優先度で一つへ割り当てる</td><td>主案は候補を消さず、利用時の文脈で選ぶ</td></tr><tr><td><a href="https://patents.google.com/patent/US20090254819A1/en">US20090254819A1</a></td><td>一つの誤表記に複数正解を対応付け、文脈統計で選ぶ</td><td>一対多と文脈選択が強く近い。文字入力のスペル訂正</td></tr><tr><td><a href="https://patents.google.com/patent/US20250335933A1/en">US20250335933A1</a></td><td>不明語の定義を質問・保存し、矛盾する定義を文脈で区別</td><td>意味質問・保存・競合判断が近い。ASR誤認識を起点としない</td></tr><tr><td><a href="https://patents.justia.com/patent/5754977">US5754977A</a></td><td>登録時に新旧音声パターンの混同を検出し、変更を促す</td><td>競合検出と登録対話は既知。説明を後段選択へ使う点を要検討</td></tr><tr><td><a href="https://patents.google.com/patent/US20220392432A1/en">US20220392432A1</a></td><td>訂正履歴、個人クラス、アプリ文脈から候補を再順位付け</td><td>個人化された二段補正が近いが、語義質問ではない</td></tr>
-  </tbody></table>
-</section>
-<section class="section">
-  <h2>調査した技術の体系</h2>
-  <div class="patents"><div class="patent-group"><h3>専門語登録・辞書・誤認識対応表</h3><p>JP5366169B2、JP6718182B1、JP2022526467A、JP2018045001A、JP7414078B2、US20150106100A1、US5754977A</p></div><div class="patent-group"><h3>訂正対話・位置特定・音素照合</h3><p>JP4604178B2、JP3718088B2、JP4270770B2、JP4537755B2、WO2003025904A1、US20050203751A1</p></div><div class="patent-group"><h3>訂正履歴・RAG・LLM・個人化</h3><p>JP7771015B2、JP2025135075A、US10522133B2、US20220392432A1、US12444412B2、WO2006113350A2</p></div><div class="patent-group"><h3>意味質問・同音語・漢字説明</h3><p>US20250335933A1、US20200034423A1、JP7178995B2、JP2002287787A、JP5622566B2、US20260065907A1</p></div><div class="patent-group"><h3>音響検索・候補・利用者文脈</h3><p>US12444402B2、US9558740B1、US8600760B2、US12633290B2、JP7322782B2、US8204739B2</p></div><div class="patent-group"><h3>学習データ・モデル更新・評価</h3><p>JP4657736B2、JP7146038B2、JP7104247B2、JP7858433B2、JP6526608B2、WO2023113422A1</p></div></div>
-</section>
-<section class="section columns">
-  <div><h2>出願へ向けて強める点</h2><p>「意味を保存する」ではなく、競合候補の選択に必要な情報をどのように質問し、候補へ関連付け、将来の補正時に投入するかを具体化する。新しい語を追加した後も、以前の登録語の認識精度を維持できることを測る。</p></div>
-  <div><h2>必要な検証</h2><p>通常ASR、固定置換、文脈だけの候補選択、候補別説明を加えた選択を比較する。候補選択正解率、一般語を誤って壊す率、質問数、後段モデルの呼出し率、遅延、入力情報量を測る。</p></div>
-</section>
-<footer class="footer"><p>本資料はブレスト用の途中整理であり、出願可否、権利範囲、他社権利の実施可否を確定する法的意見ではない。公式の審査経過、補正後の権利範囲、全ファミリー、非特許文献、分類による網羅検索は今後の確認事項。</p><p><a href="BRAINSTORM_BRIEF.md">詳細版Markdown</a>　<a href="PRIOR_ART_INDEX.md">近接先行技術索引</a>　<a href="HANDOFF.md">引き継ぎ資料</a></p></footer>
+
+<div class="links">
+  <p>詳細資料：<a href="BRAINSTORM_BRIEF.md">統合メモ</a>　<a href="PRIOR_ART_INDEX.md">近接先行技術索引</a>　<a href="HANDOFF.md">引き継ぎ資料</a></p>
+  <p>本資料はブレスト及び調査整理を目的とする。出願可否、権利範囲又は他社権利の実施可否を確定する法的意見ではない。</p>
+</div>
 </main></body>
 </html>
