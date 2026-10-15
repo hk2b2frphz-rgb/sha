@@ -10,7 +10,7 @@
 # Logs: written under logs/ (run `mkdir -p logs` beforehand)
 #
 # NOTE: adjust resource line (-l) and queue (-q) to match your cluster
-#PBS -N term_extract
+#PBS -N STDIN
 #PBS -l select=1:ncpus=8:ngpus=1:mem=64gb
 #PBS -l walltime=12:00:00
 #PBS -j oe
