@@ -63,28 +63,28 @@ def svg_base(name, height, content, description):
 <g class="diagram" style="--arrow:url(#{name}-arrow)">{content}</g></svg><figcaption>{html.escape(name)}</figcaption></figure>'''
 
 
-ACQUISITION = svg_base('図1　理由から質問判断情報を更新', 125, '''
-<rect x="15" y="28" width="240" height="66"/><text x="135" y="54"><tspan>実施済み操作の理由を</tspan><tspan x="135" dy="23">対話で取得</tspan></text>
+ACQUISITION = svg_base('図1　回答から次回の判断条件を得る', 125, '''
+<rect x="15" y="28" width="240" height="66"/><text x="135" y="54"><tspan>操作した理由を</tspan><tspan x="135" dy="23">運転員に聞く</tspan></text>
 <path class="line" d="M255 61H330"/>
-<rect x="330" y="28" width="240" height="66"/><text x="450" y="54"><tspan>理由に関係する</tspan><tspan x="450" dy="23">監視項目を特定</tspan></text>
+<rect x="330" y="28" width="240" height="66"/><text x="450" y="54"><tspan>回答から項目と</tspan><tspan x="450" dy="23">条件を取り出す</tspan></text>
 <path class="line" d="M570 61H645"/>
-<rect x="645" y="28" width="240" height="66"/><text x="765" y="54"><tspan>操作に関連付けた</tspan><tspan x="765" dy="23">質問判断情報を更新</tspan></text>
-''', '操作理由を取得し、理由に関係する監視項目を特定して、質問判断情報を更新する。')
+<rect x="645" y="28" width="240" height="66"/><text x="765" y="54"><tspan>暗黙知DBに</tspan><tspan x="765" dy="23">理由と条件を追加</tspan></text>
+''', '操作理由を聞き、回答から判断項目と条件を取り出し、暗黙知DBへ操作と関連付けて保存する。')
 
-RUNTIME = svg_base('図2　後続操作時の質問制御', 520, '''
-<rect x="300" y="10" width="300" height="56"/><text x="450" y="44">対応する操作を検出</text>
+RUNTIME = svg_base('図2　判断条件を次回の質問に反映する', 520, '''
+<rect x="300" y="10" width="300" height="56"/><text x="450" y="44">同じ種類の操作を検出</text>
 <path class="line" d="M450 66V94"/>
-<rect x="300" y="94" width="300" height="56"/><text x="450" y="117"><tspan>理由由来の監視項目の</tspan><tspan x="450" dy="22">操作時点の状態を取得</tspan></text>
+<rect x="300" y="94" width="300" height="56"/><text x="450" y="117"><tspan>必要な測定値を</tspan><tspan x="450" dy="22">操作時点で確認</tspan></text>
 <path class="line" d="M450 150V180"/>
-<polygon points="450,180 595,245 450,310 305,245"/><text x="450" y="238"><tspan>利用可能な既知状態に</tspan><tspan x="450" dy="23">該当するか</tspan></text>
+<polygon points="450,180 595,245 450,310 305,245"/><text x="450" y="238"><tspan>DBの判断条件に</tspan><tspan x="450" dy="23">当てはまるか</tspan></text>
 <path class="line" d="M595 245H730V345"/><text class="label" x="670" y="230">はい</text>
-<rect x="615" y="345" width="230" height="60"/><text x="730" y="380">理由質問を低頻度化</text>
-<path class="line" d="M305 245H170V345"/><text class="label" x="185" y="230">いいえ・情報不足</text>
-<rect x="55" y="345" width="230" height="60"/><text x="170" y="380">今回の理由を質問</text>
+<rect x="615" y="345" width="230" height="60"/><text x="730" y="380">質問する回数を減らす</text>
+<path class="line" d="M305 245H170V345"/><text class="label" x="185" y="230">いいえ・値が不明</text>
+<rect x="55" y="345" width="230" height="60"/><text x="170" y="380">今回の理由を聞く</text>
 <path class="line" d="M170 405V465H300"/>
-<path class="line" d="M730 405V465H600"/><text class="label" x="730" y="440">質問した場合</text>
-<rect x="300" y="435" width="300" height="60"/><text x="450" y="459"><tspan>回答から</tspan><tspan x="450" dy="22">質問判断情報を更新</tspan></text>
-''', '既知状態なら質問頻度を下げ、それ以外又は情報不足なら理由を聞く。回答を得た場合は質問判断情報を更新する。省略時は更新しない。')
+<path class="line" d="M730 405V465H600"/><text class="label" x="730" y="440">回答を得た場合</text>
+<rect x="300" y="435" width="300" height="60"/><text x="450" y="459"><tspan>回答を使い、暗黙知DBの</tspan><tspan x="450" dy="22">理由と条件を補う</tspan></text>
+''', '保存した条件に当てはまれば質問を減らし、それ以外や測定値が不明な場合は理由を聞く。新たな回答から項目と条件を更新する。')
 
 CSS = '''
 :root{color-scheme:light;--ink:#202020;--line:#bababa;--muted:#666}
@@ -97,12 +97,12 @@ h1{font-size:28px;line-height:1.5;font-weight:600;margin:0 0 8px}h2{font-size:20
 @media print{@page{size:A4;margin:14mm}body{background:#fff;font-size:10pt;line-height:1.7}nav{display:none}main{max-width:none;margin:0}.page,.page[hidden]{display:block;border:0;padding:0;min-height:0;break-after:page}.page:last-child{break-after:auto}h1{font-size:20pt}h2{font-size:14pt;margin:14px 0 9px}h3{font-size:11pt}p{margin-bottom:9px}table{font-size:8.5pt;line-height:1.55;margin:10px 0}th,td{padding:6px}figure{break-inside:avoid;margin:12px 0}thead{display:table-header-group}tr{break-inside:avoid}a{color:inherit;text-decoration:none}.page-footer{margin-top:14px;font-size:8pt}}
 '''
 
-JS = '''
-const pages=[...document.querySelectorAll('.page')],select=document.querySelector('#chapter'),prev=document.querySelector('#prev'),next=document.querySelector('#next'),status=document.querySelector('#status');
-function show(i,scroll=true){i=Math.max(0,Math.min(pages.length-1,i));pages.forEach((p,j)=>p.hidden=j!==i);select.value=String(i);prev.disabled=i===0;next.disabled=i===pages.length-1;status.textContent=`${i+1} / ${pages.length}`;history.replaceState(null,'',`#page-${i+1}`);if(scroll)window.scrollTo({top:0,behavior:'instant'});}
-select.addEventListener('change',()=>show(Number(select.value)));prev.addEventListener('click',()=>show(Number(select.value)-1));next.addEventListener('click',()=>show(Number(select.value)+1));
-document.addEventListener('keydown',e=>{if(['SELECT','INPUT','TEXTAREA'].includes(e.target.tagName))return;if(e.key==='ArrowRight'){e.preventDefault();show(Number(select.value)+1)}if(e.key==='ArrowLeft'){e.preventDefault();show(Number(select.value)-1)}});
-document.querySelector('#print').addEventListener('click',()=>window.print());show((Number(location.hash.replace('#page-',''))||1)-1,false);
+CSS += '''
+main{background:#fff;border:1px solid #ddd}
+.page{border:0;min-height:0;padding-top:28px;padding-bottom:12px}
+.page + .page{border-top:1px solid #ddd}
+.page:last-child{padding-bottom:36px}
+@media(max-width:750px){main{border:0}}
 '''
 
 
@@ -125,36 +125,26 @@ class StructureCheck(HTMLParser):
 
 def main():
     source = (ROOT / f'{STEM}.md').read_text(encoding='utf-8')
-    validation = validate()
-    # Legacy validation remains in its CSV even when no table marker is in the brief.
-    block = '<!-- validation:start -->\n\n'+validation+'\n\n<!-- validation:end -->'
-    if '<!-- validation:table -->' in source:
-        source = source.replace('<!-- validation:table -->', block)
-    else:
-        source = re.sub(r'<!-- validation:start -->[\s\S]*?<!-- validation:end -->', lambda _: block, source)
-    (ROOT / f'{STEM}.md').write_text(source, encoding='utf-8')
     renderer = MarkdownIt('commonmark', {'html': True}).enable('table')
-    titles = ['背景と提案', '理由と質問判断情報', '後続操作時の処理', '主要公報との比較', '関連技術と特許性', '検証結果', '特許要件の点検', '出願原稿と準備状況']
     sections = source.split('<!-- pagebreak -->')
-    assert len(sections) == len(titles)
+    assert len(sections) == 5
     pages = []
     for i, section in enumerate(sections):
         for name, figure in [('acquisition',ACQUISITION),('runtime',RUNTIME)]:
             section = re.sub(r'<!-- figure:'+name+r' -->\s*```mermaid[\s\S]*?```', lambda _:figure,section)
         body = renderer.render(section)
-        pages.append(f'<article class="page" id="page-{i+1}" aria-label="{titles[i]}"'+(' hidden' if i else '')+f'>{body}<footer class="page-footer">操作理由に基づく質問判断の更新　｜　{i+1} / {len(sections)}</footer></article>')
-    options = ''.join(f'<option value="{i}">{i+1}　{t}</option>' for i,t in enumerate(titles))
-    document = f'''<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>操作理由に基づく質問判断の更新</title><style>{CSS}</style></head><body>
-<nav aria-label="文書のページ移動"><button id="prev" aria-label="前のページ">前へ</button><select id="chapter" aria-label="章を選択">{options}</select><button id="next" aria-label="次のページ">次へ</button><span id="status" role="status" aria-live="polite"></span><button id="print">印刷</button></nav>
-<main>{''.join(pages)}</main><script>{JS}</script></body></html>'''
+        pages.append(f'<article class="page" id="page-{i+1}">{body}</article>')
+    document = f'''<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(source.splitlines()[0].lstrip('# '))}</title><style>{CSS}</style></head><body>
+<main>{''.join(pages)}</main></body></html>'''
     (ROOT / f'{STEM}.html').write_text(document, encoding='utf-8')
     check = StructureCheck()
     check.feed(document)
-    assert check.counts == {'article': 8, 'svg': 2, 'table': 6}, check.counts
+    assert check.counts == {'article': 5, 'svg': 2, 'table': 4}, check.counts
     assert len(check.ids) == len(set(check.ids)), 'Duplicate HTML IDs'
-    assert len(check.links) >= 15 and all(link.startswith('https://') for link in check.links)
+    assert len(check.links) >= 11 and all(link.startswith('https://') for link in check.links)
     assert '```' not in document and '<!-- figure:' not in document
-    print(json.dumps({'pages':len(pages),'synthetic_checks':len(CASES),'structure':'passed','html':str(ROOT/f'{STEM}.html')},ensure_ascii=True))
+    assert '<button' not in document and '<script' not in document and ' hidden' not in document
+    print(json.dumps({'pages':len(pages),'structure':'passed','html':str(ROOT/f'{STEM}.html')},ensure_ascii=True))
 
 
 if __name__ == '__main__':
