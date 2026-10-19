@@ -1,0 +1,71 @@
+# Sewage-domain reading benchmark (n=60).
+# S001-S015: existing human_curated gold (migrated from benchmark_terms_sewage.tsv).
+# S016-S060: readings proposed from linguistic/domain knowledge, then independently
+#   confirmed via authoritative web sources (municipal water bureaus, industry glossaries,
+#   ministry/PWRI/JSWA documents). NOT taken from Sudachi / UniDic-fugashi / pyopenjtalk
+#   or any LLM resolver under evaluation (would be circular evaluation).
+# notes flag the 6 cases where dictionary resolvers produced a WRONG reading (research-relevant
+#   evidence that dictionaries fail on low-frequency domain on-yomi / rendaku).
+# reading: hiragana, normalized; multiple acceptable readings separated by "|".
+# source: human_curated | web_verified.
+id	term	reading	source	domain	notes
+S001	活性汚泥法	かっせいおでいほう	human_curated	sewage
+S002	嫌気性消化	けんきせいしょうか	human_curated	sewage
+S003	最終沈殿池	さいしゅうちんでんち	human_curated	sewage
+S004	生物化学的酸素要求量	せいぶつかがくてきさんそようきゅうりょう	human_curated	sewage
+S005	化学的酸素要求量	かがくてきさんそようきゅうりょう	human_curated	sewage
+S006	懸濁物質	けんだくぶっしつ	human_curated	sewage
+S007	嫌気好気法	けんきこうきほう	human_curated	sewage
+S008	脱窒素	だっちっそ	human_curated	sewage
+S009	汚泥脱水	おでいだっすい	human_curated	sewage
+S010	流量調整槽	りゅうりょうちょうせいそう	human_curated	sewage
+S011	散気装置	さんきそうち	human_curated	sewage
+S012	膜分離活性汚泥法	まくぶんりかっせいおでいほう	human_curated	sewage
+S013	汚泥消化槽	おでいしょうかそう	human_curated	sewage
+S014	硝化脱窒	しょうかだっちっそ	human_curated	sewage
+S015	返送汚泥	へんそうおでい	human_curated	sewage
+S016	沈砂池	ちんさち	web_verified	sewage	堺市上下水道局「沈砂池（ちんさち）」で確認。辞書(Sudachi=ちんしゃち)は誤り
+S017	最初沈殿池	さいしょちんでんち	web_verified	sewage	川崎市/茂木町ほか処理工程図で確認(最終沈殿池=さいしゅうと対)
+S018	余剰汚泥	よじょうおでい	web_verified	sewage
+S019	消化ガス	しょうかがす	web_verified	sewage
+S020	脱水汚泥	だっすいおでい	web_verified	sewage
+S021	汚泥濃縮	おでいのうしゅく	web_verified	sewage
+S022	凝集沈殿	ぎょうしゅうちんでん	web_verified	sewage
+S023	高分子凝集剤	こうぶんしぎょうしゅうざい	web_verified	sewage
+S024	塩化第二鉄	えんかだいにてつ	web_verified	sewage
+S025	硫酸ばんど	りゅうさんばんど	web_verified	sewage	硫酸バンド=りゅうさんばんど(礬土のカナ表記)で確認。表記ゆれ硫酸バンド
+S026	次亜塩素酸ナトリウム	じあえんそさんなとりうむ	web_verified	sewage
+S027	放流水	ほうりゅうすい	web_verified	sewage
+S028	流入水	りゅうにゅうすい	web_verified	sewage
+S029	雨水吐	うすいばき	web_verified	sewage	「雨水吐き室(うすいばき)」で確認。辞書(あまみずはき)は誤り
+S030	合流式下水道	ごうりゅうしきげすいどう	web_verified	sewage
+S031	分流式下水道	ぶんりゅうしきげすいどう	web_verified	sewage
+S032	揚水ポンプ	ようすいぽんぷ	web_verified	sewage
+S033	担体	たんたい	web_verified	sewage	接触酸化の微生物担体=たんたいで確認
+S034	生物膜法	せいぶつまくほう	web_verified	sewage
+S035	回転円板法	かいてんえんばんほう	web_verified	sewage
+S036	接触酸化法	せっしょくさんかほう	web_verified	sewage
+S037	硝化	しょうか	web_verified	sewage
+S038	脱窒	だっちつ	web_verified	sewage	クイックリン「脱窒(だっちつ)」で確認(脱窒素=だっちっそと別)
+S039	アンモニア性窒素	あんもにあせいちっそ	web_verified	sewage
+S040	全窒素	ぜんちっそ	web_verified	sewage
+S041	全リン	ぜんりん	web_verified	sewage
+S042	浮遊物質	ふゆうぶっしつ	web_verified	sewage
+S043	溶存酸素	ようぞんさんそ	web_verified	sewage
+S044	透視度	とうしど	web_verified	sewage
+S045	大腸菌群	だいちょうきんぐん	web_verified	sewage
+S046	嫌気無酸素好気法	けんきむさんそこうきほう	web_verified	sewage	習志野市PDF「けんき・むさんそ・こうきほう」で確認。辞書(いやけ〜)は誤り
+S047	標準活性汚泥法	ひょうじゅんかっせいおでいほう	web_verified	sewage
+S048	終末処理場	しゅうまつしょりじょう	web_verified	sewage
+S049	下水処理場	げすいしょりじょう	web_verified	sewage
+S050	汚泥焼却	おでいしょうきゃく	web_verified	sewage
+S051	脱離液	だつりえき	web_verified	sewage
+S052	返流水	へんりゅうすい	web_verified	sewage	返流=へんりゅう(下水処理解説)で確認。辞書(かえしりゅうすい)は誤り
+S053	曝気槽	ばっきそう	web_verified	sewage
+S054	越流堰	えつりゅうぜき	web_verified	sewage	設備用語集で「えつりゅうぜき」確認。辞書(えつりゅうせき/連濁なし)は誤り
+S055	汚泥引抜	おでいひきぬき	web_verified	sewage	「汚泥引抜き作業/量」(EICネット等)で確認。辞書(おでいひきぬけ)は誤り
+S056	取水	しゅすい	web_verified	sewage
+S057	凝集剤	ぎょうしゅうざい	web_verified	sewage
+S058	沈殿汚泥	ちんでんおでい	web_verified	sewage
+S059	汚水ます	おすいます	web_verified	sewage	汚水桝=おすいますで確認。表記ゆれます/桝
+S060	汚泥処分	おでいしょぶん	web_verified	sewage

@@ -1,0 +1,196 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>操作理由から判断条件を学び、次回の質問に反映する監視制御システム</title><style>
+:root{color-scheme:light;--ink:#202020;--line:#bababa;--muted:#666}
+*{box-sizing:border-box}body{margin:0;background:#f3f3f1;color:var(--ink);font-family:"Yu Mincho","Hiragino Mincho ProN",serif;font-size:15px;line-height:1.85}
+nav{position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #ccc;padding:10px 24px;display:flex;align-items:center;justify-content:center;gap:16px;font-family:"Yu Gothic",sans-serif;font-size:13px}
+button,select{font:inherit;color:inherit;background:#fff;border:1px solid #aaa;border-radius:2px;padding:6px 10px}button:disabled{opacity:.35}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #444;outline-offset:3px}select{max-width:45vw}
+main{max-width:1080px;margin:24px auto 48px}.page{background:#fff;padding:36px 58px 28px;min-height:850px;border:1px solid #ddd}.page[hidden]{display:none}.page-footer{margin-top:28px;padding-top:10px;border-top:1px solid #ccc;color:var(--muted);font:12px "Yu Gothic",sans-serif;text-align:right}
+h1{font-size:28px;line-height:1.5;font-weight:600;margin:0 0 8px}h2{font-size:20px;margin:22px 0 14px;border-bottom:1px solid #444;padding-bottom:5px;line-height:1.6}h2:first-child{margin-top:0}h3{font-size:16px;margin:22px 0 8px}p{margin:0 0 13px}h1+p{font-size:12px;color:var(--muted)}strong{font-weight:600}a{color:#214b70;text-underline-offset:3px}table{width:100%;border-collapse:collapse;margin:16px 0;font:13px/1.7 "Yu Gothic",sans-serif}th,td{border:1px solid var(--line);padding:9px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere}th{background:#f3f3f3;font-weight:600}th:first-child{min-width:145px}figure{margin:22px 0}svg{width:100%;height:auto;display:block}figcaption{font:12px "Yu Gothic",sans-serif;text-align:center;color:var(--muted);margin-top:6px}.diagram rect,.diagram polygon{fill:#fff;stroke:#222;stroke-width:1.4}.diagram text{font:16px "Yu Gothic",sans-serif;fill:#222;text-anchor:middle}.diagram .label{font-size:13px}.diagram .line{fill:none;stroke:#222;stroke-width:1.5;marker-end:var(--arrow)}
+@media(max-width:750px){nav{gap:8px;padding:8px}main{margin:0 auto}.page{padding:24px 20px;min-height:0;border:0}h1{font-size:24px}table{font-size:12px}th,td{padding:7px}th:first-child{min-width:90px}.page-footer{margin-top:20px}}
+@media print{@page{size:A4;margin:14mm}body{background:#fff;font-size:10pt;line-height:1.7}nav{display:none}main{max-width:none;margin:0}.page,.page[hidden]{display:block;border:0;padding:0;min-height:0;break-after:page}.page:last-child{break-after:auto}h1{font-size:20pt}h2{font-size:14pt;margin:14px 0 9px}h3{font-size:11pt}p{margin-bottom:9px}table{font-size:8.5pt;line-height:1.55;margin:10px 0}th,td{padding:6px}figure{break-inside:avoid;margin:12px 0}thead{display:table-header-group}tr{break-inside:avoid}a{color:inherit;text-decoration:none}.page-footer{margin-top:14px;font-size:8pt}}
+
+main{background:#fff;border:1px solid #ddd}
+.page{border:0;min-height:0;padding-top:28px;padding-bottom:12px}
+.page + .page{border-top:1px solid #ddd}
+.page:last-child{padding-bottom:36px}
+@media(max-width:750px){main{border:0}}
+</style></head><body>
+<main><article class="page" id="page-1"><h1>操作理由から判断条件を学び、次回の質問に反映する監視制御システム</h1>
+<p>出願検討資料｜2026年10月19日</p>
+<h2>1．背景</h2>
+<p>設備の監視システムには、測定値や操作履歴が残る。しかし、それだけでは「運転員が何を見て、なぜ操作したか」までは分からない。理由を毎回聞けば判断の知識を集められるが、同じ説明を繰り返す負担が生じる。</p>
+<h2>2．アイデア</h2>
+<p><strong>提案手法は、運転員に操作理由を聞き、回答から判断に使った項目と条件を得る。次回の操作では、その条件と今回の状態を比べて理由を聞くかを判断する。新しい回答を得たら、判断条件を補い、以後の質問判断に反映する。</strong></p>
+<p>提案手法では、理由を聞いた結果によって、次回の質問の仕方を変える。既に理由を聞いた条件に当てはまる場合は質問を減らし、条件が異なる場合や情報が足りない場合は理由を聞く。回答から新しい判断材料を得たら、次回から確認する項目や条件も変える。</p>
+<p>提案手法は、操作・理由・判断条件を暗黙知DBに保存する。操作履歴・監視データと関連付け、回答から得た条件を追加・補完する。アイデアの中心は、回答から得た条件を使って次回の質問判断を変え、新たな回答でさらに条件を更新する処理にある。暗黙知DBは、この処理を支える保存部品として使う。</p>
+<h3>PAC増量での例</h3>
+<p>PACは、水中の汚れを集める凝集剤である。運転員がPACの注入量を増やしたとき、システムが理由を尋ねる。</p>
+<table>
+<thead>
+<tr>
+<th>場面</th>
+<th>提案手法の動作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>運転員がPACを増量する</td>
+<td>操作履歴から増量を検出し、暗黙知DBを確認する。理由が未登録なら「今回、PACを増やした理由は何ですか」と聞く。</td>
+</tr>
+<tr>
+<td>運転員が「原水の濁りが強く、水温も低かったから」と回答する</td>
+<td>「PAC増量」という操作に、理由・確認項目・「濁度が高い、かつ水温が低い」という条件を関連付けてDBへ保存する。</td>
+</tr>
+<tr>
+<td>後日、運転員が別の条件でPACを増量する</td>
+<td>DBの条件だけでは今回の理由が分からないため、運転員に聞く。</td>
+</tr>
+<tr>
+<td>回答から別の理由を得る</td>
+<td>新たな条件と理由をDBへ追加する。以前の条件と理由も残す。</td>
+</tr>
+</tbody>
+</table>
+<p>「高い」「低い」の区分には施設の既存基準を使う。基準が分からない場合は確認し、システムが勝手に閾値を決めない。</p>
+</article><article class="page" id="page-2"><h2>3．暗黙知DBには何を保存するか</h2>
+<p>まず、どの設備で、何の設定を、どちらの方向に変えたかを操作履歴から確認する。例えば「A系列のPAC注入量を増やした操作」を、別系列の操作や減量操作と分けて扱う。</p>
+<p>提案手法は、運転員の回答から、判断に使った監視項目とその条件を取り出し、操作・理由と結び付けて暗黙知DBに保存する。これにより、測定値の履歴だけでは把握できない「判断のつながり」を補う。</p>
+<figure><svg viewBox="0 0 900 125" role="img" aria-labelledby="図1　回答から次回の判断条件を得る-title 図1　回答から次回の判断条件を得る-desc">
+<title id="図1　回答から次回の判断条件を得る-title">図1　回答から次回の判断条件を得る</title><desc id="図1　回答から次回の判断条件を得る-desc">操作理由を聞き、回答から判断項目と条件を取り出し、暗黙知DBへ操作と関連付けて保存する。</desc>
+<defs><marker id="図1　回答から次回の判断条件を得る-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#222"/></marker></defs>
+<g class="diagram" style="--arrow:url(#図1　回答から次回の判断条件を得る-arrow)">
+<rect x="15" y="28" width="240" height="66"/><text x="135" y="54"><tspan>操作した理由を</tspan><tspan x="135" dy="23">運転員に聞く</tspan></text>
+<path class="line" d="M255 61H330"/>
+<rect x="330" y="28" width="240" height="66"/><text x="450" y="54"><tspan>回答から項目と</tspan><tspan x="450" dy="23">条件を取り出す</tspan></text>
+<path class="line" d="M570 61H645"/>
+<rect x="645" y="28" width="240" height="66"/><text x="765" y="54"><tspan>暗黙知DBに</tspan><tspan x="765" dy="23">理由と条件を追加</tspan></text>
+</g></svg><figcaption>図1　回答から次回の判断条件を得る</figcaption></figure>
+<table>
+<thead>
+<tr>
+<th>保存する情報</th>
+<th>具体例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>どの操作か</td>
+<td>A系列のPAC注入量を増やす操作</td>
+</tr>
+<tr>
+<td>運転員の回答</td>
+<td>「原水の濁りが強く、水温も低かったから」</td>
+</tr>
+<tr>
+<td>判断に使った項目</td>
+<td>A系列の原水濁度、水温</td>
+</tr>
+<tr>
+<td>回答から得た判断条件</td>
+<td>施設の基準で、原水濁度が「高い」、かつ水温が「低い」</td>
+</tr>
+</tbody>
+</table>
+<p>例えば、最初の回答が「濁りが強かったから」なら、まず濁度について保存する。その後の回答から「水温が低いことも判断に関係する」と確認したら、その説明がどの操作・条件に当てはまるかを確認して補う。別の理由で増量した事例は、別の条件として追加する。</p>
+<p>回答の言葉は、実際の測定項目に対応付ける。例えば「原水の濁り」は、原水濁度の測定値に対応させる。項目名の辞書やLLMで候補を出し、施設にその測定項目があるかを確認する。</p>
+<p>「濁度と水温を見た」としか分からない場合は、どんな状態だったかを追加で聞く。条件が決まるまでは、質問を減らす根拠に使わない。</p>
+<p>新しい回答は、以前の回答を残したまま追加する。目視で確認した汚れの固まりなど、測定値に結び付けられない理由も保存するが、自動で質問を減らす判定には使わない。</p>
+</article><article class="page" id="page-3"><h2>4．学んだ条件を使い、次回の質問を判断する</h2>
+<p>提案手法は、同じ設備で同じ設定を同じ方向に変えた操作を検出すると、暗黙知DBから、その操作に関連する理由と条件を取り出す。操作時点の測定値と比べ、登録済みの条件に当てはまるかを確認する。未登録の状況や条件が不明な場合は理由を聞き、回答でDBを補う。</p>
+<figure><svg viewBox="0 0 900 520" role="img" aria-labelledby="図2　判断条件を次回の質問に反映する-title 図2　判断条件を次回の質問に反映する-desc">
+<title id="図2　判断条件を次回の質問に反映する-title">図2　判断条件を次回の質問に反映する</title><desc id="図2　判断条件を次回の質問に反映する-desc">保存した条件に当てはまれば質問を減らし、それ以外や測定値が不明な場合は理由を聞く。新たな回答から項目と条件を更新する。</desc>
+<defs><marker id="図2　判断条件を次回の質問に反映する-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#222"/></marker></defs>
+<g class="diagram" style="--arrow:url(#図2　判断条件を次回の質問に反映する-arrow)">
+<rect x="300" y="10" width="300" height="56"/><text x="450" y="44">同じ種類の操作を検出</text>
+<path class="line" d="M450 66V94"/>
+<rect x="300" y="94" width="300" height="56"/><text x="450" y="117"><tspan>必要な測定値を</tspan><tspan x="450" dy="22">操作時点で確認</tspan></text>
+<path class="line" d="M450 150V180"/>
+<polygon points="450,180 595,245 450,310 305,245"/><text x="450" y="238"><tspan>DBの判断条件に</tspan><tspan x="450" dy="23">当てはまるか</tspan></text>
+<path class="line" d="M595 245H730V345"/><text class="label" x="670" y="230">はい</text>
+<rect x="615" y="345" width="230" height="60"/><text x="730" y="380">質問する回数を減らす</text>
+<path class="line" d="M305 245H170V345"/><text class="label" x="185" y="230">いいえ・値が不明</text>
+<rect x="55" y="345" width="230" height="60"/><text x="170" y="380">今回の理由を聞く</text>
+<path class="line" d="M170 405V465H300"/>
+<path class="line" d="M730 405V465H600"/><text class="label" x="730" y="440">回答を得た場合</text>
+<rect x="300" y="435" width="300" height="60"/><text x="450" y="459"><tspan>回答を使い、暗黙知DBの</tspan><tspan x="450" dy="22">理由と条件を補う</tspan></text>
+</g></svg><figcaption>図2　判断条件を次回の質問に反映する</figcaption></figure>
+<p>提案手法は、濁度が高く水温が低い状態でのPAC再増量を検出したら、質問を減らす。水温が低くない場合や、水温の値を取得できない場合は理由を聞く。判断に関係のない別設備の測定値は比べない。</p>
+<p><strong>条件が同じでも、理由が同じとは限らない。</strong> そのため、条件に当てはまる場合も時々質問し、新しい理由を集める。質問をしなかった回には、過去の理由を今回の理由として記録しない。</p>
+<p>新たな回答から「pHも見て判断した」と確認したら、次回からpHも確認する。濁度と水温だけが同じでも、pHの条件が違えば質問する。pHが分からない古い記録を、条件が一致した記録として扱わない。</p>
+</article><article class="page" id="page-4"><h2>5．近い特許と、今回比較する点</h2>
+<p>本案で比較するのは、<strong>操作理由から判断項目と条件を得て、次回の操作時の状態と比べ、理由を聞く頻度を変え、新しい回答で条件を更新する一連の処理</strong>である。暗黙知DBは、その情報を保存・参照するために使う。</p>
+<p>以下は、これまで確認した「理由の取得と次回の質問制御」に関する比較である。理由の保存、条件の学習、質問の選択については既存技術があり、それらと本案の処理のつながりを具体的に比べる。</p>
+<table>
+<thead>
+<tr>
+<th>特許文献</th>
+<th>確認した内容</th>
+<th>本案との比較で残る点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://patents.google.com/patent/JP2020173683A/ja">JP2020173683A</a></td>
+<td>操作時にコメント入力を求め、操作と一緒に保存・表示する。判断基準や理由にも触れている。</td>
+<td>理由から条件を作り、次回の質問を減らす処理は、確認箇所では見つかっていない。</td>
+</tr>
+<tr>
+<td><a href="https://patents.google.com/patent/JP2025026446A/ja">JP2025026446A</a></td>
+<td>監視データへの専門家の回答を集め、根拠が足りなければ質問する。専門家が見た判断項目も取得する。</td>
+<td>後の実操作で、回答から得た項目の状態を比べ、理由を聞く回数を減らす処理までは特定していない。</td>
+</tr>
+<tr>
+<td><a href="https://patents.google.com/patent/JP7726786B2/ja">JP7726786B2</a></td>
+<td>プラントについて質問し、回答から支援情報を作る。評価理由を使って質問を修正・追加・削除する記載もある。</td>
+<td>操作理由から得た監視項目を使い、次回の操作で理由を聞く頻度を変える処理までは特定していない。</td>
+</tr>
+<tr>
+<td><a href="https://patents.google.com/patent/JP3057355B2/ja">JP3057355B2</a></td>
+<td>状態や操作を標準事例と比べ、モデルで操作理由を説明できるかを判定する。</td>
+<td>運転員の回答から条件を作り、次回の理由質問を減らす処理は、確認箇所では見つかっていない。</td>
+</tr>
+</tbody>
+</table>
+<p>確認範囲：JP2020173683Aの請求項1〜4・実施形態4、JP2025026446Aの請求項1・8・10〜14と関連本文、JP7726786B2の登録請求項1・2・6と関連本文、JP3057355B2の登録請求項1・2・4・5・本文【0025】。</p>
+<p>「見つかっていない」は、確認した範囲での結果を指す。公開公報の記載と、登録された請求項の範囲は区別して確認する。</p>
+</article><article class="page" id="page-5"><h2>6．関連する技術と、特許としての検討点</h2>
+<p>理由を学ぶ技術、対話で条件を作る技術、必要な質問を選ぶ技術には、既存の研究や特許がある。</p>
+<table>
+<thead>
+<tr>
+<th>関連文献</th>
+<th>既に示されていること</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://patents.google.com/patent/US20220237504A1/en">US20220237504A1</a>／<a href="https://patents.google.com/patent/US12182671B2/en">US12182671B2</a></td>
+<td>人が重視した特徴とモデルの説明を比べ、学習や質問対象の選択に使う。</td>
+</tr>
+<tr>
+<td><a href="https://arxiv.org/html/2009.04568">Active Learning++</a></td>
+<td>人が重視した特徴の順位とモデルの説明の一致度から、次に質問する対象を選ぶ。</td>
+</tr>
+<tr>
+<td><a href="https://arxiv.org/html/1909.00031">PUMICE</a></td>
+<td>対話や実演から条件・閾値・値の取得方法を学び、再利用する。</td>
+</tr>
+<tr>
+<td><a href="https://patents.google.com/patent/US5944839A/en">US5944839A</a></td>
+<td>観測データで事例を評価し、足りない情報を機械や利用者から得る。</td>
+</tr>
+<tr>
+<td><a href="https://patents.google.com/patent/US6701195B2/en">US6701195B2</a></td>
+<td>関係するセンサだけを使い、過去の似た事例を探して予測する。</td>
+</tr>
+<tr>
+<td><a href="https://patents.google.com/patent/US20090307162A1/en">US20090307162A1</a></td>
+<td>操作の実演から学び、不足情報を質問する。質問による利益と回答の負担も考慮する。</td>
+</tr>
+</tbody>
+</table>
+<h3>現時点で分かっていること</h3>
+<p>確認した主要文献の中では、本案の一連の処理とすべて一致する単一文献は特定していない。ただし、関連文献を網羅した調査ではなく、新規性が確定したわけではない。</p>
+<h3>さらに検討すること</h3>
+<p>既存の「理由の記録」「対話による条件学習」「質問対象の選択」を組み合わせれば、本案を作れるという指摘が考えられる。「理由を使って質問を改善する」という説明だけでは、違いが十分に伝わらない。</p>
+<p>比較すべき点は、<strong>回答から判断条件を得る処理、その条件で次回の状態を比べる処理、質問頻度を変える処理、新回答で条件を更新する処理のつながり</strong>である。例えば、回答でpHが判断材料に加わったとき、次回からpHの違いも質問判断に反映する。このつながりを既存技術と比べる必要があり、特許性が確認済みという意味ではない。</p>
+</article></main></body></html>

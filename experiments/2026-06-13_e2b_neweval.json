@@ -1,0 +1,703 @@
+{
+  "provider": "gemma",
+  "model": "google/gemma-4-E2B-it",
+  "timestamp": "2026-06-13T12:40:44.573143+00:00",
+  "cases_file": "data/test_cases.tsv",
+  "n_total": 30,
+  "n_correct": 18,
+  "acc_reading_correct": 0.6,
+  "per_term": [
+    {
+      "term": "心筋梗塞",
+      "gold_reading": "しんきんこうそく",
+      "domain": "medical",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "心筋梗塞の早期発見には定期的な検査が大切です",
+          "llm_output": "しんきんこうそく<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "深層学習",
+      "gold_reading": "しんそうがくしゅう",
+      "domain": "it",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "深層学習によって画像認識の精度が飛躍的に向上しました",
+          "llm_output": "しんそうがくしゅう<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "量子コンピュータ",
+      "gold_reading": "りょうしこんぴゅーた",
+      "domain": "it",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "量子コンピュータは従来のコンピュータでは解けない問題に挑みます",
+          "llm_output": "りょうしこんぴゅーた<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "腰椎椎間板ヘルニア",
+      "gold_reading": "ようついついかんばんへるにあ",
+      "domain": "medical",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "腰椎椎間板ヘルニアは長時間の座り仕事で悪化しやすいです",
+          "llm_output": "ようついしいかんぱんヘルニア<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "有機エレクトロルミネッセンス",
+      "gold_reading": "ゆうきえれくとろるみねっせんす",
+      "domain": "it",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "このテレビは有機エレクトロルミネッセンスパネルを採用しています",
+          "llm_output": "ゆうきえれくとろるみねっす）<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "慢性閉塞性肺疾患",
+      "gold_reading": "まんせいへいそくせいはいしっかん",
+      "domain": "medical",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "慢性閉塞性肺疾患は喫煙が主な原因のひとつです",
+          "llm_output": "まんせいへいそくせいはいしっかん<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "心房細動",
+      "gold_reading": "しんぼうさいどう",
+      "domain": "medical",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "心房細動は脳梗塞のリスクを大きく高める不整脈です",
+          "llm_output": "しんぼうさいどう<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "大動脈弁狭窄症",
+      "gold_reading": "だいどうみゃくべんきょうさくしょう",
+      "domain": "medical",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "大動脈弁狭窄症の治療では弁置換手術が行われることがあります",
+          "llm_output": "だいどうみゃくべんきょうさくしょう<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "糖尿病性腎症",
+      "gold_reading": "とうにょうびょうせいじんしょう",
+      "domain": "medical",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "糖尿病性腎症は透析が必要になる主な原因のひとつです",
+          "llm_output": "とうにょうびせいじんしょう<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "畳み込みニューラルネットワーク",
+      "gold_reading": "たたみこみにゅーらるねっとわーく",
+      "domain": "it",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "畳み込みニューラルネットワークを使った顔認証の技術が普及しています",
+          "llm_output": "たたみこみニューラルネットワーク<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "自然言語処理",
+      "gold_reading": "しぜんげんごしょり",
+      "domain": "it",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "自然言語処理の進歩によってリアルタイム翻訳が実現しました",
+          "llm_output": "しぜんげんごしょり<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "強化学習",
+      "gold_reading": "きょうかがくしゅう",
+      "domain": "it",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "強化学習を使ったロボットが自律的に歩行技術を習得しました",
+          "llm_output": "きょうかがくしゅう<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "超伝導体",
+      "gold_reading": "ちょうでんどうたい",
+      "domain": "engineering",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "超伝導体を利用したリニアモーターカーの実用化が進んでいます",
+          "llm_output": "ちょうでんどうたい<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "光触媒",
+      "gold_reading": "こうしょくばい",
+      "domain": "engineering",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "光触媒のコーティングを施した壁面は汚れが付きにくくなります",
+          "llm_output": "こうしょくばい<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "血栓溶解療法",
+      "gold_reading": "けっせんようかいりょうほう",
+      "domain": "medical",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "脳梗塞の急性期には血栓溶解療法を速やかに行うことが重要です",
+          "llm_output": "けっせんようかいりょうほう<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "活性汚泥法",
+      "gold_reading": "かっせいおでいほう",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "活性汚泥法は下水処理で最も広く使われている生物処理法です",
+          "llm_output": "かっせいおどろほう<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "嫌気性消化",
+      "gold_reading": "けんきせいしょうか",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "嫌気性消化によって汚泥からバイオガスを回収することができます",
+          "llm_output": "けんきせいしょうか<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "最終沈殿池",
+      "gold_reading": "さいしゅうちんでんち",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "処理水は最終沈殿池で余剰汚泥を沈降させてから放流されます",
+          "llm_output": "さいしゅうちんでんち<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "生物化学的酸素要求量",
+      "gold_reading": "せいぶつかがくてきさんそようきゅうりょう",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "河川の汚染度を示す生物化学的酸素要求量の数値が改善されました",
+          "llm_output": "せいぶかへきのおさんようようきうりょう<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "化学的酸素要求量",
+      "gold_reading": "かがくてきさんそようきゅうりょう",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "工場排水の化学的酸素要求量が基準値を超えると指導対象になります",
+          "llm_output": "かがくてきさんそようきゅうりょう<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "懸濁物質",
+      "gold_reading": "けんだくぶっしつ",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "放流水の懸濁物質濃度が規制値以下であることを確認します",
+          "llm_output": "けんたくぶっしつ<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "嫌気好気法",
+      "gold_reading": "けんきこうきほう",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "嫌気好気法は窒素とリンを同時に生物処理で除去できます",
+          "llm_output": "けんきこうきほう<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "脱窒素",
+      "gold_reading": "だっちっそ",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "脱窒素処理を行うことで河川への窒素負荷を減らすことができます",
+          "llm_output": "だつちつそ<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "汚泥脱水",
+      "gold_reading": "おでいだっすい",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "汚泥脱水後の含水率を下げるほど運搬や処分のコストが下がります",
+          "llm_output": "おでいだつすい<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "流量調整槽",
+      "gold_reading": "りゅうりょうちょうせいそう",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "流量調整槽を設けることで雨天時の急激な流入に対応できます",
+          "llm_output": "りゅうりょうちょうせいそう<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "散気装置",
+      "gold_reading": "さんきそうち",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 1,
+      "examples": [
+        {
+          "sentence": "散気装置の目詰まりは曝気槽の溶存酸素不足を引き起こします",
+          "llm_output": "さんきそうち<turn|>"
+        }
+      ],
+      "acc_correct": 1.0
+    },
+    {
+      "term": "膜分離活性汚泥法",
+      "gold_reading": "まくぶんりかっせいおでいほう",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "膜分離活性汚泥法を使うと従来法より少ない設置面積で高水質が得られます",
+          "llm_output": "まくぶんりかっせいおどろほう<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "汚泥消化槽",
+      "gold_reading": "おでいしょうかそう",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "汚泥消化槽の適切な温度管理がメタン発酵の効率を左右します",
+          "llm_output": "おでいしょうそう<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "硝化脱窒",
+      "gold_reading": "しょうかだっちっそ",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "硝化脱窒プロセスでは好気と嫌気の切り替えが繰り返されます",
+          "llm_output": "しょうかだつちつ<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    },
+    {
+      "term": "返送汚泥",
+      "gold_reading": "へんそうおでい",
+      "domain": "sewage",
+      "n": 1,
+      "n_correct": 0,
+      "examples": [
+        {
+          "sentence": "返送汚泥の流量比を適切に調整して微生物濃度を安定させます",
+          "llm_output": "へんそうおどろい<turn|>"
+        }
+      ],
+      "acc_correct": 0.0
+    }
+  ],
+  "all_results": [
+    {
+      "id": "001",
+      "term": "心筋梗塞",
+      "gold_reading": "しんきんこうそく",
+      "llm_output": "しんきんこうそく<turn|>",
+      "reading_correct": true,
+      "domain": "medical",
+      "sentence": "心筋梗塞の早期発見には定期的な検査が大切です"
+    },
+    {
+      "id": "002",
+      "term": "深層学習",
+      "gold_reading": "しんそうがくしゅう",
+      "llm_output": "しんそうがくしゅう<turn|>",
+      "reading_correct": true,
+      "domain": "it",
+      "sentence": "深層学習によって画像認識の精度が飛躍的に向上しました"
+    },
+    {
+      "id": "003",
+      "term": "量子コンピュータ",
+      "gold_reading": "りょうしこんぴゅーた",
+      "llm_output": "りょうしこんぴゅーた<turn|>",
+      "reading_correct": true,
+      "domain": "it",
+      "sentence": "量子コンピュータは従来のコンピュータでは解けない問題に挑みます"
+    },
+    {
+      "id": "004",
+      "term": "腰椎椎間板ヘルニア",
+      "gold_reading": "ようついついかんばんへるにあ",
+      "llm_output": "ようついしいかんぱんヘルニア<turn|>",
+      "reading_correct": false,
+      "domain": "medical",
+      "sentence": "腰椎椎間板ヘルニアは長時間の座り仕事で悪化しやすいです"
+    },
+    {
+      "id": "005",
+      "term": "有機エレクトロルミネッセンス",
+      "gold_reading": "ゆうきえれくとろるみねっせんす",
+      "llm_output": "ゆうきえれくとろるみねっす）<turn|>",
+      "reading_correct": false,
+      "domain": "it",
+      "sentence": "このテレビは有機エレクトロルミネッセンスパネルを採用しています"
+    },
+    {
+      "id": "006",
+      "term": "慢性閉塞性肺疾患",
+      "gold_reading": "まんせいへいそくせいはいしっかん",
+      "llm_output": "まんせいへいそくせいはいしっかん<turn|>",
+      "reading_correct": true,
+      "domain": "medical",
+      "sentence": "慢性閉塞性肺疾患は喫煙が主な原因のひとつです"
+    },
+    {
+      "id": "007",
+      "term": "心房細動",
+      "gold_reading": "しんぼうさいどう",
+      "llm_output": "しんぼうさいどう<turn|>",
+      "reading_correct": true,
+      "domain": "medical",
+      "sentence": "心房細動は脳梗塞のリスクを大きく高める不整脈です"
+    },
+    {
+      "id": "008",
+      "term": "大動脈弁狭窄症",
+      "gold_reading": "だいどうみゃくべんきょうさくしょう",
+      "llm_output": "だいどうみゃくべんきょうさくしょう<turn|>",
+      "reading_correct": true,
+      "domain": "medical",
+      "sentence": "大動脈弁狭窄症の治療では弁置換手術が行われることがあります"
+    },
+    {
+      "id": "009",
+      "term": "糖尿病性腎症",
+      "gold_reading": "とうにょうびょうせいじんしょう",
+      "llm_output": "とうにょうびせいじんしょう<turn|>",
+      "reading_correct": false,
+      "domain": "medical",
+      "sentence": "糖尿病性腎症は透析が必要になる主な原因のひとつです"
+    },
+    {
+      "id": "010",
+      "term": "畳み込みニューラルネットワーク",
+      "gold_reading": "たたみこみにゅーらるねっとわーく",
+      "llm_output": "たたみこみニューラルネットワーク<turn|>",
+      "reading_correct": true,
+      "domain": "it",
+      "sentence": "畳み込みニューラルネットワークを使った顔認証の技術が普及しています"
+    },
+    {
+      "id": "011",
+      "term": "自然言語処理",
+      "gold_reading": "しぜんげんごしょり",
+      "llm_output": "しぜんげんごしょり<turn|>",
+      "reading_correct": true,
+      "domain": "it",
+      "sentence": "自然言語処理の進歩によってリアルタイム翻訳が実現しました"
+    },
+    {
+      "id": "012",
+      "term": "強化学習",
+      "gold_reading": "きょうかがくしゅう",
+      "llm_output": "きょうかがくしゅう<turn|>",
+      "reading_correct": true,
+      "domain": "it",
+      "sentence": "強化学習を使ったロボットが自律的に歩行技術を習得しました"
+    },
+    {
+      "id": "013",
+      "term": "超伝導体",
+      "gold_reading": "ちょうでんどうたい",
+      "llm_output": "ちょうでんどうたい<turn|>",
+      "reading_correct": true,
+      "domain": "engineering",
+      "sentence": "超伝導体を利用したリニアモーターカーの実用化が進んでいます"
+    },
+    {
+      "id": "014",
+      "term": "光触媒",
+      "gold_reading": "こうしょくばい",
+      "llm_output": "こうしょくばい<turn|>",
+      "reading_correct": true,
+      "domain": "engineering",
+      "sentence": "光触媒のコーティングを施した壁面は汚れが付きにくくなります"
+    },
+    {
+      "id": "015",
+      "term": "血栓溶解療法",
+      "gold_reading": "けっせんようかいりょうほう",
+      "llm_output": "けっせんようかいりょうほう<turn|>",
+      "reading_correct": true,
+      "domain": "medical",
+      "sentence": "脳梗塞の急性期には血栓溶解療法を速やかに行うことが重要です"
+    },
+    {
+      "id": "016",
+      "term": "活性汚泥法",
+      "gold_reading": "かっせいおでいほう",
+      "llm_output": "かっせいおどろほう<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "活性汚泥法は下水処理で最も広く使われている生物処理法です"
+    },
+    {
+      "id": "017",
+      "term": "嫌気性消化",
+      "gold_reading": "けんきせいしょうか",
+      "llm_output": "けんきせいしょうか<turn|>",
+      "reading_correct": true,
+      "domain": "sewage",
+      "sentence": "嫌気性消化によって汚泥からバイオガスを回収することができます"
+    },
+    {
+      "id": "018",
+      "term": "最終沈殿池",
+      "gold_reading": "さいしゅうちんでんち",
+      "llm_output": "さいしゅうちんでんち<turn|>",
+      "reading_correct": true,
+      "domain": "sewage",
+      "sentence": "処理水は最終沈殿池で余剰汚泥を沈降させてから放流されます"
+    },
+    {
+      "id": "019",
+      "term": "生物化学的酸素要求量",
+      "gold_reading": "せいぶつかがくてきさんそようきゅうりょう",
+      "llm_output": "せいぶかへきのおさんようようきうりょう<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "河川の汚染度を示す生物化学的酸素要求量の数値が改善されました"
+    },
+    {
+      "id": "020",
+      "term": "化学的酸素要求量",
+      "gold_reading": "かがくてきさんそようきゅうりょう",
+      "llm_output": "かがくてきさんそようきゅうりょう<turn|>",
+      "reading_correct": true,
+      "domain": "sewage",
+      "sentence": "工場排水の化学的酸素要求量が基準値を超えると指導対象になります"
+    },
+    {
+      "id": "021",
+      "term": "懸濁物質",
+      "gold_reading": "けんだくぶっしつ",
+      "llm_output": "けんたくぶっしつ<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "放流水の懸濁物質濃度が規制値以下であることを確認します"
+    },
+    {
+      "id": "022",
+      "term": "嫌気好気法",
+      "gold_reading": "けんきこうきほう",
+      "llm_output": "けんきこうきほう<turn|>",
+      "reading_correct": true,
+      "domain": "sewage",
+      "sentence": "嫌気好気法は窒素とリンを同時に生物処理で除去できます"
+    },
+    {
+      "id": "023",
+      "term": "脱窒素",
+      "gold_reading": "だっちっそ",
+      "llm_output": "だつちつそ<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "脱窒素処理を行うことで河川への窒素負荷を減らすことができます"
+    },
+    {
+      "id": "024",
+      "term": "汚泥脱水",
+      "gold_reading": "おでいだっすい",
+      "llm_output": "おでいだつすい<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "汚泥脱水後の含水率を下げるほど運搬や処分のコストが下がります"
+    },
+    {
+      "id": "025",
+      "term": "流量調整槽",
+      "gold_reading": "りゅうりょうちょうせいそう",
+      "llm_output": "りゅうりょうちょうせいそう<turn|>",
+      "reading_correct": true,
+      "domain": "sewage",
+      "sentence": "流量調整槽を設けることで雨天時の急激な流入に対応できます"
+    },
+    {
+      "id": "026",
+      "term": "散気装置",
+      "gold_reading": "さんきそうち",
+      "llm_output": "さんきそうち<turn|>",
+      "reading_correct": true,
+      "domain": "sewage",
+      "sentence": "散気装置の目詰まりは曝気槽の溶存酸素不足を引き起こします"
+    },
+    {
+      "id": "027",
+      "term": "膜分離活性汚泥法",
+      "gold_reading": "まくぶんりかっせいおでいほう",
+      "llm_output": "まくぶんりかっせいおどろほう<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "膜分離活性汚泥法を使うと従来法より少ない設置面積で高水質が得られます"
+    },
+    {
+      "id": "028",
+      "term": "汚泥消化槽",
+      "gold_reading": "おでいしょうかそう",
+      "llm_output": "おでいしょうそう<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "汚泥消化槽の適切な温度管理がメタン発酵の効率を左右します"
+    },
+    {
+      "id": "029",
+      "term": "硝化脱窒",
+      "gold_reading": "しょうかだっちっそ",
+      "llm_output": "しょうかだつちつ<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "硝化脱窒プロセスでは好気と嫌気の切り替えが繰り返されます"
+    },
+    {
+      "id": "030",
+      "term": "返送汚泥",
+      "gold_reading": "へんそうおでい",
+      "llm_output": "へんそうおどろい<turn|>",
+      "reading_correct": false,
+      "domain": "sewage",
+      "sentence": "返送汚泥の流量比を適切に調整して微生物濃度を安定させます"
+    }
+  ]
+}
